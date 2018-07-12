@@ -1,0 +1,24 @@
+{
+  "name": "uboss",
+  "version": "0.0.1",
+  "description": "A lightweight authorization framework",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "lab --assert code --coverage"
+  },
+  "author": "davide talesco",
+  "license": "ISC",
+  "devDependencies": {
+    "code": "^5.2.0",
+    "lab": "^15.5.0"
+  },
+  "dependencies": {
+    "@stamp/it": "^1.0.3",
+    "lodash": "^4.17.10",
+    "ramda": "^0.25.0",
+    "stampit": "^4.1.2"
+  }
+}
