@@ -50,6 +50,19 @@ const ACL_ATTRIBUTE = stampit({
   }
 });
 
+const ROLE_BASED_ACL = stampit({
+  initializers: [
+    function ({ role }){
+      if (role) {
+        this.role = role;
+        this.kind = 'role';
+        // override ACL evaluate method with attribute based method evaluation
+        this.evaluate = metadata => this.attribute.evaluate.call(this.attribute, metadata)
+      };
+    }
+  ]
+});
+
 const ATTRIBUTE_BASED_ACL = stampit({
   initializers: [
     function ({ attribute }){
@@ -71,7 +84,8 @@ const ACL = stampit({
       assert(this.methods, "method || methods must exist in ACL object");
     }
   ]
-}).compose(ATTRIBUTE_BASED_ACL);
+}).compose(ATTRIBUTE_BASED_ACL)
+  .compose(ROLE_BASED_ACL);
 
 const UBOSS = stampit({
   initializers: [
@@ -82,6 +96,8 @@ const UBOSS = stampit({
       // initialize the acl list
       instance._acl = [];
 
+      // initialize the roles list
+      instance._roles = [];
     },
   ],
   methods:{
@@ -100,6 +116,13 @@ const UBOSS = stampit({
         // push the method to this instance method list
         this._acl.push(acl);
       }
+      else if (options.role){
+        // initialize method
+        assert(typeof options.role === 'function', "role must be a function");
+        assert(!R.find(R.equals(options.role.name), this._roles.map(r => r.name)), 'roles must be unique');
+        // push the method to this instance method list
+        this._roles.push(options.role);
+      }
       else {
         throw new Error('Unsupported load options')
       }
@@ -114,6 +137,16 @@ const UBOSS = stampit({
 
       if (unprotectedMethods.length > 0){
         throw new Error(`unprotected Method: ${JSON.stringify(unprotectedMethods)}`)
+      }
+
+      // check that for each role acl there is a registered role
+      const unknownRoles = this._acl
+        .filter(acl => acl.kind === 'role')
+        .map(acl => acl.role)
+        .filter(acl => !this._roles.includes(acl.role));
+
+      if (unknownRoles.length > 0){
+        throw new Error(`unknown Roles: ${JSON.stringify(unknownRoles)}`)
       }
     },
     exec: function exec(req = {}){
@@ -136,6 +169,11 @@ const UBOSS = stampit({
       if (methodName)
         return R.clone(R.filter( acl => acl.methods.includes(methodName), this._acl));
       return R.clone(this._acl);
+    },
+    roles: function roles( name ){
+      if (name)
+        return R.clone(R.filter( r => r === name, this._roles.map(r => r.name)));
+      return R.clone(this._roles);
     }
   }
 });

@@ -38,6 +38,16 @@ experiment('test load ', () => {
     expect(uboss.acl().length).to.be.equal(1)
   });
 
+  test('valid role', () =>{
+    const uboss = UB();
+
+    function owner(){
+
+    }
+    uboss.load({role: owner});
+    expect(uboss.roles('owner').length).to.be.equal(1)
+  });
+
   test('unknown object type', () =>{
     const uboss = UB();
     const acl = {
@@ -119,6 +129,30 @@ experiment('test load acl', () => {
 
 });
 
+experiment('test load roles', () => {
+
+  test('load malformed role that is not a function', () =>{
+    const uboss = UB();
+
+
+
+    expect(() => uboss.load({role: {}}))
+      .to.throw('role must be a function');
+  });
+
+  test('load duplicate role', () =>{
+    const uboss = UB();
+    function owner(){
+
+    }
+
+    uboss.load({role: owner});
+    expect(() => uboss.load({role: owner}))
+      .to.throw('roles must be unique');
+  });
+
+});
+
 experiment('test ready', ()=>{
 
   test('no method', () => {
@@ -173,6 +207,15 @@ experiment('test ready', ()=>{
     uboss.load({method: 'method1'});
     uboss.load({acl: acl});
     uboss.ready()
+  });
+
+  test('acl referencing non existing role should throw', () => {
+    const uboss = UB();
+    const acl = { method: 'login', role: 'owner'}
+
+    uboss.load({acl: acl});
+    expect(() => uboss.ready())
+      .to.throw('unknown Roles: ["owner"]');
   });
 });
 
