@@ -57,7 +57,15 @@ const ROLE_BASED_ACL = stampit({
         this.role = role;
         this.kind = 'role';
         // override ACL evaluate method with attribute based method evaluation
-        this.evaluate = metadata => this.attribute.evaluate.call(this.attribute, metadata)
+        this.evaluate = (metadata, uboss) => {
+          const roleFn = uboss.roles(this.role);
+          try{
+            return roleFn(metadata);
+          }
+          catch(e){
+            return false
+          }
+        }
       };
     }
   ]
@@ -143,7 +151,7 @@ const UBOSS = stampit({
       const unknownRoles = this._acl
         .filter(acl => acl.kind === 'role')
         .map(acl => acl.role)
-        .filter(acl => !this._roles.includes(acl.role));
+        .filter(role => !this._roles.map(r => r.name).includes(role));
 
       if (unknownRoles.length > 0){
         throw new Error(`unknown Roles: ${JSON.stringify(unknownRoles)}`)
@@ -156,9 +164,9 @@ const UBOSS = stampit({
       assert(method, 'Request must have a method property');
       assert(R.find(R.equals(method), this._methods), `method ${method} does not exists`);
 
-      // evaluate all ACL and return true if at least one acl evaluated true
+      // evaluate all ACL bound to this method and return true if at least one acl evaluated true
       return this.acl(method)
-        .map(acl => acl.evaluate(req.metadata))
+        .map(acl => acl.evaluate(req.metadata, this))
         .reduce((acc, currentValue) => acc || currentValue, false);
     },
     methods: function methods( name ){
@@ -171,8 +179,12 @@ const UBOSS = stampit({
       return R.clone(this._acl);
     },
     roles: function roles( name ){
-      if (name)
-        return R.clone(R.filter( r => r === name, this._roles.map(r => r.name)));
+      const roles = this._roles;
+      if (name){
+        return R.clone(R.find( r => {
+          return r.name === name
+        }, roles));
+      }
       return R.clone(this._roles);
     }
   }

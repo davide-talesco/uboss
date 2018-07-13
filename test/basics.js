@@ -45,7 +45,7 @@ experiment('test load ', () => {
 
     }
     uboss.load({role: owner});
-    expect(uboss.roles('owner').length).to.be.equal(1)
+    expect(uboss.roles('owner').name).to.be.equal('owner')
   });
 
   test('unknown object type', () =>{
@@ -134,8 +134,6 @@ experiment('test load roles', () => {
   test('load malformed role that is not a function', () =>{
     const uboss = UB();
 
-
-
     expect(() => uboss.load({role: {}}))
       .to.throw('role must be a function');
   });
@@ -143,7 +141,6 @@ experiment('test load roles', () => {
   test('load duplicate role', () =>{
     const uboss = UB();
     function owner(){
-
     }
 
     uboss.load({role: owner});
@@ -209,9 +206,19 @@ experiment('test ready', ()=>{
     uboss.ready()
   });
 
+  test('acl referencing valid role', () => {
+    const uboss = UB();
+    const acl = { method: 'login', role: 'owner'};
+    function owner(){};
+
+    uboss.load({role: owner});
+    uboss.load({acl: acl});
+    uboss.ready()
+  });
+
   test('acl referencing non existing role should throw', () => {
     const uboss = UB();
-    const acl = { method: 'login', role: 'owner'}
+    const acl = { method: 'login', role: 'owner'};
 
     uboss.load({acl: acl});
     expect(() => uboss.ready())
@@ -441,4 +448,99 @@ experiment('test exec attribute based acl', () => {
     expect(() => uboss.exec({ method: 'unknown', metadata})).to.throw('method unknown does not exists');
 
   });
+
+});
+
+experiment('test exec role based acl', () => {
+
+  test('matching role', () => {
+    const acl = {
+      method: 'increase',
+      role: 'admin'
+    };
+
+    function admin(metadata){
+      return metadata.requestor.id === metadata.resource.owner;
+    }
+
+    const metadata = {
+      requestor : {
+        id: 1,
+        tags: ['admin', 'internal']
+      },
+      resource: {
+        owner: 1
+      }
+    }
+
+    const uboss = UB();
+    uboss.load({role: admin});
+    uboss.load({method: 'increase'});
+    uboss.load({acl: acl});
+    uboss.ready();
+
+    expect(uboss.exec({ method: 'increase', metadata})).to.be.equal(true);
+
+  });
+
+  test('non matching role should return false', () => {
+    const acl = {
+      method: 'increase',
+      role: 'admin'
+    };
+
+    function admin(metadata){
+      return metadata.requestor.id === metadata.resource.owner;
+    }
+
+    const metadata = {
+      requestor : {
+        id: 1,
+        tags: ['admin', 'internal']
+      },
+      resource: {
+        owner: 3
+      }
+    }
+
+    const uboss = UB();
+    uboss.load({role: admin});
+    uboss.load({method: 'increase'});
+    uboss.load({acl: acl});
+    uboss.ready();
+
+    expect(uboss.exec({ method: 'increase', metadata})).to.be.equal(false);
+
+  });
+
+  test('role throws an error synchronously should return false', () => {
+    const acl = {
+      method: 'increase',
+      role: 'admin'
+    };
+
+    function admin(metadata){
+      return metadata.error.id === metadata.error.owner;
+    }
+
+    const metadata = {
+      requestor : {
+        id: 1,
+        tags: ['admin', 'internal']
+      },
+      resource: {
+        owner: 1
+      }
+    };
+
+    const uboss = UB();
+    uboss.load({role: admin});
+    uboss.load({method: 'increase'});
+    uboss.load({acl: acl});
+    uboss.ready();
+
+    expect(uboss.exec({ method: 'increase', metadata})).to.be.equal(false);
+
+  });
+
 });
