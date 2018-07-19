@@ -33,11 +33,6 @@ uboss.load({acl: acl});
 uboss.exec({method: 'doStuff', metadata: {requestor: { roles: [ 'admin']}}}); // => true
 
 uboss.exec({method: 'doStuff', metadata: {requestor: { roles: [ 'user']}}}); // => false
-
-// method
-function doStuff(){
-  // ...
-}
 ```
 
 # ACL
