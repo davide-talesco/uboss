@@ -27,7 +27,7 @@ const acl = {
   }
 };
 
-uboss.load({method: doStuff});
+uboss.load({methods: 'doStuff'});
 uboss.load({acl: acl});
 
 uboss.exec({method: 'doStuff', metadata: {requestor: { roles: [ 'admin']}}}); // => true
@@ -72,6 +72,28 @@ const acl = {
     equal: 'admin'
   }
 };
+
+// acl bound to multiple methods
+const acl = {
+  methods: ['doStuff', 'otherStuff'],
+  attribute: {
+    path: 'requestor.roles',
+    equal: 'admin'
+  }
+};
+
+// this is the same as defining 2 attribute based acl
+const acl = {
+  method: 'doStuff',
+  attributes: [{
+    path: 'requestor.roles',
+    equal: 'admin'
+  }, {
+    path: 'requestor.roles',
+    equal: 'admin'
+  }]
+};
+
 ```
 
 ## Attribute/Attribute based acl
@@ -103,26 +125,50 @@ function owner(metadata){
   metadata.requestor.roles.includes('admin');
 };
 
-// method
-function doStuff(){
-  // ...
-}
-
 const acl = {
   method: 'doStuff',
   role: 'owner'
 };
 
-uboss.load({method: doStuff});
+// this should be like defining 2 role based acl
+const acl = {
+  method: 'doStuff',
+  roles: ['owner', 'mayor']
+};
+
+uboss.load({methods: 'doStuff'});
 uboss.load({acl: acl});
-uboss.load({role: owner});
+uboss.load({roles: owner});
 
 uboss.exec({method: 'doStuff', metadata: {requestor: { id: 1, roles: [ 'admin']}}, resource: { owner: 1}}); // => true
 
 uboss.exec({method: 'doStuff', metadata: {requestor: { id: 1, roles: [ 'admin']}}, resource: { owner: 3}}); // => false
+
 ```
 
 Uboss will swallow any error thrown by the roles fn and return false instead.
 
 ## Result
 The exec method always return true or false
+
+## API
+
+### LOAD
+
+**Load Method** Accept an object as per below schemas
+
+Property Name | Type | Required |  Default | Description
+-------- | -------- | ----------- | -------- | ------- |
+`methods` | string OR [] | **true** | N/A |  this is name of method || methods to load into uboss
+
+**Load ACL** Accept an object as per below schemas
+
+Property Name | Type | Required |  Default | Description
+-------- | -------- | ----------- | -------- | ------- |
+`acl` | acl Object OR [acl Object] | **true** | N/A |  this is the acl Object || a list of acl objects
+
+**Load ROLES** Accept an object as per below schemas
+
+Property Name | Type | Required |  Default | Description
+-------- | -------- | ----------- | -------- | ------- |
+`roles` | role Object OR [role Object] | **true** | N/A |  this is the role Object || a list of role objects

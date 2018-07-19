@@ -52,19 +52,25 @@ const ACL_ATTRIBUTE = stampit({
 
 const ROLE_BASED_ACL = stampit({
   initializers: [
-    function ({ role }){
-      if (role) {
-        this.role = role;
+    function ({ role, roles }){
+
+      assert(!(role && roles), 'only one between role and roles property is allowed in role based acl');
+
+      // TODO support multiple roles
+      if (role || roles ) {
+        this.roles = _.castArray(role || roles);
         this.kind = 'role';
         // override ACL evaluate method with attribute based method evaluation
         this.evaluate = (metadata, uboss) => {
-          const roleFn = uboss.roles(this.role);
-          try{
-            return roleFn(metadata);
-          }
-          catch(e){
-            return false
-          }
+          const roleFnList = this.roles.map(role => uboss.roles(role));
+          return roleFnList.map(roleFn => {
+            try{
+              return roleFn(metadata);
+            }
+            catch(e){
+              return false
+            }
+          }).reduce((acc, currValue) => acc || currValue, false)
         }
       };
     }
@@ -73,11 +79,19 @@ const ROLE_BASED_ACL = stampit({
 
 const ATTRIBUTE_BASED_ACL = stampit({
   initializers: [
-    function ({ attribute }){
-      if (attribute) {
-        this.attribute = ACL_ATTRIBUTE(attribute);
+    function ({ attribute, attributes }){
+
+      assert(!(attribute && attributes), 'only one between attribute and attributes property is allowed in attribute based acl');
+
+      if (attribute || attributes ) {
+        this.attributes = _.castArray(attribute || attributes).map(ACL_ATTRIBUTE);
         // override ACL evaluate method with attribute based method evaluation
-        this.evaluate = metadata => this.attribute.evaluate.call(this.attribute, metadata)
+        this.evaluate = function(metadata){
+          return this.attributes
+            .map(attribute => attribute.evaluate.call(attribute, metadata))
+            // if any of the attribute evaluate to true the acl evaluate to true
+            .reduce((acc, currValue) => acc || currValue, false);
+        }
       };
     }
   ]
@@ -86,10 +100,12 @@ const ATTRIBUTE_BASED_ACL = stampit({
 const ACL = stampit({
   initializers: [
     function ({ method, methods }){
-      if (method) this.methods = _.castArray(method);
-      if (methods) this.methods = _.castArray(methods);
 
-      assert(this.methods, "method || methods must exist in ACL object");
+      assert(!(method && methods), 'only one between method and methods property is allowed in acl');
+
+      this.methods = _.castArray(method || methods);
+
+      assert(this.methods.length > 0, "method || methods must exist in ACL object");
     }
   ]
 }).compose(ATTRIBUTE_BASED_ACL)
@@ -110,26 +126,35 @@ const UBOSS = stampit({
   ],
   methods:{
     load: function load(options = {}){
-      if (options.method){
 
-        assert(typeof options.method === 'string', "method must be a string");
-        assert(!R.find(R.equals(options.method), this._methods), 'method names must be unique');
+      if (options.methods){
+        const methods = _.castArray(options.methods);
 
-        // push the method to this instance methods object
-        this._methods.push(options.method);
+        methods.map(method => {
+          assert(typeof method === 'string', "method must be a string");
+          assert(!R.find(R.equals(method), this._methods), 'method names must be unique');
+
+          // push the method to this instance methods object
+          this._methods.push(method);
+        })
       }
       else if (options.acl){
-        // initialize method
-        const acl = ACL(options.acl);
-        // push the method to this instance method list
-        this._acl.push(acl);
+        // initialize acl
+        const aclList = _.castArray(options.acl);
+        aclList.map(ACL)
+        // push the method to this instance acl list
+          .map(acl => this._acl.push(acl))
       }
-      else if (options.role){
-        // initialize method
-        assert(typeof options.role === 'function', "role must be a function");
-        assert(!R.find(R.equals(options.role.name), this._roles.map(r => r.name)), 'roles must be unique');
-        // push the method to this instance method list
-        this._roles.push(options.role);
+      else if (options.roles){
+
+        const roles = _.castArray(options.roles);
+        roles.map(role => {
+          // initialize method
+          assert(typeof role === 'function', "role must be a function");
+          assert(!R.find(R.equals(role.name), this._roles.map(r => r.name)), 'roles must be unique');
+          // push the method to this instance method list
+          this._roles.push(role);
+        })
       }
       else {
         throw new Error('Unsupported load options')
@@ -150,7 +175,11 @@ const UBOSS = stampit({
       // check that for each role acl there is a registered role
       const unknownRoles = this._acl
         .filter(acl => acl.kind === 'role')
-        .map(acl => acl.role)
+        // [acl1, acl2, acl3]
+        .map(acl => acl.roles)
+        // [[role1], [role2, role3], [role3]]
+        .reduce((a, v) => a.concat(v), [])
+        // [role1, role2, role3, role3]
         .filter(role => !this._roles.map(r => r.name).includes(role));
 
       if (unknownRoles.length > 0){
