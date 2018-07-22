@@ -7,7 +7,7 @@
 const _ = require("lodash");
 const uboss = require("../index2");
 const Lab = require("lab");
-const { expect, fail } = require('code');
+const { expect, fail } = require("code");
 
 // Test files must require the lab module, and export a test script
 const lab = (exports.lab = Lab.script());
@@ -16,12 +16,11 @@ const lab = (exports.lab = Lab.script());
 const experiment = lab.experiment;
 const test = lab.test;
 
-experiment('fetch', () => {
-
+experiment("fetch", () => {
   test("non configured method should throw", () => {
     const U = uboss();
 
-    expect(() => U.fetch("whatever")("ciao")).to.throw(
+    expect(() => U.fetch("whatever")).to.throw(
       "method whatever has not been configured"
     );
   });
@@ -34,8 +33,7 @@ experiment('fetch', () => {
   });
 });
 
-experiment('load', ()=> {
-
+experiment("load", () => {
   test("method not a function should throw", () => {
     const U = uboss();
 
@@ -51,7 +49,9 @@ experiment('load', ()=> {
   test("2 methods with same name", async () => {
     const U = uboss();
     const config = {
-      test: {}
+      methods: {
+        test: {}
+      }
     };
     // load available methods
     U.load({ methods: { test: () => 1 } });
@@ -77,25 +77,32 @@ experiment('load', ()=> {
 
   test("2 middlewares with same name", async () => {
     const U = uboss();
-
+    const config = {
+      methods: {
+        test: {
+          middlewares: { beforeInvoke: ["test"] }
+        }
+      }
+    };
     U.load({ middlewares: { test: () => 1 } });
     U.load({ middlewares: { test: () => 2 } });
 
     U.load({ methods: { test: data => data } });
-    U.load({ config: { test: { middlewares:{ beforeInvoke: [ 'test' ]}} } });
+    U.load({ config });
 
     U.verify();
     expect(await U.fetch("test")()).to.be.equal(2);
   });
 });
 
-experiment('verify', ()=> {
-
+experiment("verify", () => {
   test("config referencing not loaded method should throw", () => {
     const U = uboss();
 
     const config = {
-      upper: {}
+      methods: {
+        upper: {}
+      }
     };
 
     // load configuration
@@ -110,9 +117,11 @@ experiment('verify', ()=> {
     U.load({ methods: { upper: data => data.toUpperCase() } });
 
     const config = {
-      upper: {
-        middlewares: {
-          beforeInvoke: {}
+      methods: {
+        upper: {
+          middlewares: {
+            beforeInvoke: {}
+          }
         }
       }
     };
@@ -127,9 +136,11 @@ experiment('verify', ()=> {
     const U = uboss();
     U.load({ methods: { upper: data => data.toUpperCase() } });
     const config = {
-      upper: {
-        middlewares: {
-          beforeInvoke: ["nonExisting"]
+      methods: {
+        upper: {
+          middlewares: {
+            beforeInvoke: ["nonExisting"]
+          }
         }
       }
     };
@@ -138,20 +149,22 @@ experiment('verify', ()=> {
     U.load({ config });
 
     // verify config is ok
-    expect(() => U.verify()).to.throw("middleware nonExisting has not been loaded");
+    expect(() => U.verify()).to.throw(
+      "middleware nonExisting has not been loaded"
+    );
   });
-
 });
 
-experiment('exec method', ()=> {
-
+experiment("exec method", () => {
   test("value returning", async () => {
     const U = uboss();
     const methods = {
-      upper: data => data.toUpperCase(),
+      upper: data => data.toUpperCase()
     };
     const config = {
-      upper: {}
+      methods: {
+        upper: {}
+      }
     };
     // load available methods
     U.load({ methods });
@@ -166,10 +179,15 @@ experiment('exec method', ()=> {
   test("promise returning", async () => {
     const U = uboss();
     const methods = {
-      upper: data => new Promise(resolve => setTimeout(() => resolve(data.toUpperCase()), 10))
+      upper: data =>
+        new Promise(resolve =>
+          setTimeout(() => resolve(data.toUpperCase()), 10)
+        )
     };
     const config = {
-      upper: {}
+      methods: {
+        upper: {}
+      }
     };
     // load available methods
     U.load({ methods });
@@ -183,19 +201,20 @@ experiment('exec method', ()=> {
 
   test("with value returning beforeInvoke middleware", async () => {
     const U = uboss();
-    U.load({ methods: { increase: num => ++num } });
-
-    U.load({ middlewares: { increase: num => ++num } });
-
-    U.load({
-      config: {
+    const config = {
+      methods: {
         increase: {
           middlewares: {
             beforeInvoke: ["increase"]
           }
         }
       }
-    });
+    };
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({ middlewares: { increase: num => ++num } });
+
+    U.load({ config });
 
     U.verify();
     expect(await U.fetch("increase")(1)).to.be.equal(3);
@@ -203,19 +222,20 @@ experiment('exec method', ()=> {
 
   test("with value returning afterInvoke middleware", async () => {
     const U = uboss();
-    U.load({ methods: { increase: num => ++num } });
-
-    U.load({ middlewares: { increase: num => ++num } });
-
-    U.load({
-      config: {
+    const config = {
+      methods: {
         increase: {
           middlewares: {
             afterInvoke: ["increase"]
           }
         }
       }
-    });
+    }
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({ middlewares: { increase: num => ++num } });
+
+    U.load({ config });
 
     U.verify();
     expect(await U.fetch("increase")(1)).to.be.equal(3);
@@ -223,27 +243,29 @@ experiment('exec method', ()=> {
 
   test("with promise returning middleware", async () => {
     const U = uboss();
-    U.load({ methods: { increase: num => ++num } });
-
-    U.load({
-      middlewares: {
-        increase: num => {
-          return new Promise((resolve) => {
-            setTimeout(()=> resolve(++num), 10)
-          });
-        }
-      }
-    });
-
-    U.load({
-      config: {
+    const config = {
+      methods: {
         increase: {
           middlewares: {
             afterInvoke: ["increase"]
           }
         }
       }
+    }
+
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({
+      middlewares: {
+        increase: num => {
+          return new Promise(resolve => {
+            setTimeout(() => resolve(++num), 10);
+          });
+        }
+      }
     });
+
+    U.load({ config });
 
     U.verify();
     expect(await U.fetch("increase")(1)).to.be.equal(3);
@@ -251,12 +273,8 @@ experiment('exec method', ()=> {
 
   test("with both afterInvoke and beforeInvoke middleware", async () => {
     const U = uboss();
-    U.load({ methods: { increase: num => ++num } });
-
-    U.load({ middlewares: { increase: num => ++num } });
-
-    U.load({
-      config: {
+    const config = {
+      methods: {
         increase: {
           middlewares: {
             beforeInvoke: ["increase"],
@@ -264,7 +282,12 @@ experiment('exec method', ()=> {
           }
         }
       }
-    });
+    };
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({ middlewares: { increase: num => ++num } });
+
+    U.load({ config });
 
     U.verify();
     expect(await U.fetch("increase")(1)).to.be.equal(4);
@@ -272,6 +295,16 @@ experiment('exec method', ()=> {
 
   test("with middleware that throws synchronously", async () => {
     const U = uboss();
+    const config = {
+      methods: {
+        increase: {
+          middlewares: {
+            beforeInvoke: ["increase"],
+            afterInvoke: ["increase"]
+          }
+        }
+      }
+    };
     U.load({ methods: { increase: num => ++num } });
 
     U.load({
@@ -282,8 +315,21 @@ experiment('exec method', ()=> {
       }
     });
 
-    U.load({
-      config: {
+    U.load({ config });
+
+    U.verify();
+
+    await U.fetch("increase")("ciao")
+      .then(() => fail("should not execute this"))
+      .catch(e => {
+        expect(e).to.be.an.error("sync Error");
+      });
+  });
+
+  test("middleware that throws synchronously with statusCode", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
         increase: {
           middlewares: {
             beforeInvoke: ["increase"],
@@ -291,19 +337,7 @@ experiment('exec method', ()=> {
           }
         }
       }
-    });
-
-    U.verify();
-
-    await U.fetch("increase")("ciao")
-      .then(() => fail('should not execute this'))
-      .catch(e => {
-        expect(e).to.be.an.error('sync Error');
-      })
-  });
-
-  test("middleware that throws synchronously with statusCode", async () => {
-    const U = uboss();
+    };
     U.load({ methods: { increase: num => ++num } });
 
     U.load({
@@ -311,53 +345,27 @@ experiment('exec method', ()=> {
         increase: num => {
           const err = new Error("sync Error");
           err.statusCode = 400;
-          throw err
+          throw err;
         }
       }
     });
 
-    U.load({
-      config: {
-        increase: {
-          middlewares: {
-            beforeInvoke: ["increase"],
-            afterInvoke: ["increase"]
-          }
-        }
-      }
-    });
+    U.load({ config });
 
     U.verify();
 
     await U.fetch("increase")("ciao")
-      .then(() => fail('should not execute this'))
+      .then(() => fail("should not execute this"))
       .catch(e => {
-        expect(e).to.be.an.error('sync Error');
+        expect(e).to.be.an.error("sync Error");
         expect(e.statusCode).to.be.equal(400);
-      })
-
+      });
   });
 
   test("middleware that reject asynchronously", async () => {
     const U = uboss();
-    U.load({ methods: { increase: num => ++num } });
-
-    U.load({
-      middlewares: {
-        increase: num => {
-          return new Promise((resolve, reject) => {
-            setTimeout(()=> {
-              const err = new Error("async Error");
-              err.statusCode = 400;
-              reject(err)
-            }, 10)
-          });
-        }
-      }
-    });
-
-    U.load({
-      config: {
+    const config = {
+      methods: {
         increase: {
           middlewares: {
             beforeInvoke: ["increase"],
@@ -365,37 +373,38 @@ experiment('exec method', ()=> {
           }
         }
       }
+    }
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({
+      middlewares: {
+        increase: num => {
+          return new Promise((resolve, reject) => {
+            setTimeout(() => {
+              const err = new Error("async Error");
+              err.statusCode = 400;
+              reject(err);
+            }, 10);
+          });
+        }
+      }
     });
+
+    U.load({ config });
 
     U.verify();
     await U.fetch("increase")("ciao")
-      .then(() => fail('should not execute this'))
+      .then(() => fail("should not execute this"))
       .catch(e => {
-        expect(e).to.be.an.error('async Error');
+        expect(e).to.be.an.error("async Error");
         expect(e.statusCode).to.be.equal(400);
-      })
+      });
   });
 
   test("middleware that throws asynchronously, (this should never happen right?)", async () => {
     const U = uboss();
-    U.load({ methods: { increase: num => ++num } });
-
-    U.load({
-      middlewares: {
-        increase: num => {
-          return new Promise((resolve, reject) => {
-            setTimeout(()=> {
-              const err = new Error("async Error");
-              err.statusCode = 400;
-              throw err
-            }, 10)
-          });
-        }
-      }
-    });
-
-    U.load({
-      config: {
+    const config = {
+      methods: {
         increase: {
           middlewares: {
             beforeInvoke: ["increase"],
@@ -403,43 +412,45 @@ experiment('exec method', ()=> {
           }
         }
       }
-    });
-
-    U.verify();
-    await U.fetch("increase")("ciao")
-      .then(() => fail('should not execute this'))
-      .catch(e => {
-        expect(e).to.be.an.error('async Error');
-        expect(e.statusCode).to.be.equal(400);
-      })
-  });
-
-  test("with beforeInvoke middleware that interrupts the chain", async()=>{
-    const U = uboss();
+    }
     U.load({ methods: { increase: num => ++num } });
 
     U.load({
       middlewares: {
-        increase: (num, res) => {
-          res(num + 10);
+        increase: num => {
+          return new Promise((resolve, reject) => {
+            setTimeout(() => {
+              const err = new Error("async Error");
+              err.statusCode = 400;
+              throw err;
+            }, 10);
+          });
         }
       }
     });
 
-    U.load({
-      config: {
+    U.load({ config });
+
+    U.verify();
+    await U.fetch("increase")("ciao")
+      .then(() => fail("should not execute this"))
+      .catch(e => {
+        expect(e).to.be.an.error("async Error");
+        expect(e.statusCode).to.be.equal(400);
+      });
+  });
+
+  test("with beforeInvoke middleware that interrupts the chain", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
         increase: {
           middlewares: {
             beforeInvoke: ["increase"]
           }
         }
       }
-    });
-    expect(await U.fetch("increase")(1)).to.be.equal(11);
-  })
-
-  test.only("with afterInvoke middleware that interrupts the chain", async()=>{
-    const U = uboss();
+    }
     U.load({ methods: { increase: num => ++num } });
 
     U.load({
@@ -450,16 +461,32 @@ experiment('exec method', ()=> {
       }
     });
 
-    U.load({
-      config: {
+    U.load({ config });
+    expect(await U.fetch("increase")(1)).to.be.equal(11);
+  });
+
+  test("with afterInvoke middleware that interrupts the chain", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
         increase: {
           middlewares: {
             afterInvoke: ["increase"]
           }
         }
       }
-    });
-    expect(await U.fetch("increase")(1)).to.be.equal(12);
-  })
-});
+    }
+    U.load({ methods: { increase: num => ++num } });
 
+    U.load({
+      middlewares: {
+        increase: (num, res) => {
+          res(num + 10);
+        }
+      }
+    });
+
+    U.load({ config });
+    expect(await U.fetch("increase")(1)).to.be.equal(12);
+  });
+});

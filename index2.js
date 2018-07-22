@@ -35,15 +35,17 @@ const METHODCONFIG = stampit({
 });
 
 const CONFIG = stampit({
+  // initialize config methods
   initializers: [
-    function(config){
+    function({ methods = {}}){
+      this.methods = {};
       // config should be an object
-      assert(_.isObjectLike(config), "config must be an object");
+      assert(_.isObjectLike(methods), "config methods property must be an object");
 
       // each config key is a method
-      Object.keys(config).map(method => {
+      Object.keys(methods).map(method => {
         // initialize the method
-        this[method] = METHODCONFIG(config[method]);
+        this.methods[method] = METHODCONFIG(methods[method]);
       })
     }
   ]
@@ -59,7 +61,7 @@ const UBOSS = stampit({
       instance._middlewares = {};
 
       // initialize the config object
-      instance._config = {};
+      instance._config = CONFIG();
     }
   ],
   methods: {
@@ -104,7 +106,7 @@ function verify() {
   const middlewares = this._middlewares;
 
   // verify methods referenced in config are avaialble in uboss instance
-  Object.keys(config).map(name => {
+  Object.keys(config.methods).map(name => {
     // verify method is available
     assert(methods[name], `method ${name} has not been loaded`);
 
@@ -112,7 +114,7 @@ function verify() {
     ["beforeInvoke", "afterInvoke"].map(phase => {
 
       // for each middleware referenced in config check it is avaialble in uboss instance
-      config[name].middlewares[phase].map(mName => {
+      config.methods[name].middlewares[phase].map(mName => {
         assert(middlewares[mName], `middleware ${mName} has not been loaded`);
       });
     });
@@ -121,17 +123,18 @@ function verify() {
 
 function fetch(methodName) {
   const config = this._config;
+  const methods = this._methods;
+  const middlewares = this._middlewares;
 
-  if (!this._config[methodName]) {
+  if (!this._config.methods[methodName]) {
     throw new Error(`method ${methodName} has not been configured`);
   }
   // method to execute
-  const method = this._methods[methodName];
-  const middlewares = this._middlewares;
+  const method = methods[methodName];
 
   // list of configured middlewares
-  const beforeInvokeMiddlewares = config[methodName].middlewares.beforeInvoke.map(name => middlewares[name]);
-  const afterInvokeMiddlewares = config[methodName].middlewares.afterInvoke.map(name => middlewares[name]);
+  const beforeInvokeMiddlewares = config.methods[methodName].middlewares.beforeInvoke.map(name => middlewares[name]);
+  const afterInvokeMiddlewares = config.methods[methodName].middlewares.afterInvoke.map(name => middlewares[name]);
 
   const pipeline = [
     ...beforeInvokeMiddlewares,

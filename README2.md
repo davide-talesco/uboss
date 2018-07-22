@@ -1,11 +1,11 @@
 # UBOSS
 
-This module provides an interface to declaratively define your methods.
+This module provides an interface to declaratively defines your methods.
 
-At its simplest form you simply pass a list of unary functions (functions should take a single argument, which throughout 
-this document is caller request) and you get back an object that expose those functions as methods.
+At its simplest form you simply pass a list of unary functions (functions should take a single `argument`, which throughout 
+this document is called `request`) and you get back an object that exposes those functions as methods.
 
-Functions must either return a value, a Promise and can throw errors both synchronously and asynchronously
+Functions must either return a value, a Promise and can throw errors both synchronously and asynchronously.
 
 ```javascript
 const U = require('uboss')();
@@ -18,8 +18,10 @@ const methods = {
 
 // configure the methods you want to expose
 const config = {
-  upper: {},
-  lower: {}
+  methods: {
+      upper: {},
+      lower: {}
+  }
 };
 
 // load available methods
@@ -80,25 +82,27 @@ const middlewares = {
 
 // configure the methods you want to expose
 const config = {
-  upper: {
-    middlewares: {
-      beforeInvoke: [
-        'duplicate'
-      ]
-    }
-  },
-  lower: {
-    middlewares: {
-      afterInvoke: [
-        'duplicate'
-      ]
-    }
-  },
-  ciao: {
-    middlewares:{
-      beforeInvoke: [
-        'interrupt'
-      ]
+  methods: {
+    upper: {
+      middlewares: {
+        beforeInvoke: [
+          'duplicate'
+        ]
+      }
+    },
+    lower: {
+      middlewares: {
+        afterInvoke: [
+          'duplicate'
+        ]
+      }
+    },
+    ciao: {
+      middlewares:{
+        beforeInvoke: [
+          'interrupt'
+        ]
+      }
     }
   }
 };
