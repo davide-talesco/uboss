@@ -16,23 +16,6 @@ const lab = (exports.lab = Lab.script());
 const experiment = lab.experiment;
 const test = lab.test;
 
-experiment("fetch", () => {
-  test("non configured method should throw", () => {
-    const U = uboss();
-
-    expect(() => U.fetch("whatever")).to.throw(
-      "method whatever has not been configured"
-    );
-  });
-
-  test("non existing method should throw", () => {
-    const U = uboss();
-    expect(() => U.fetch("unknown")("ciao")).to.throw(
-      "method unknown has not been configured"
-    );
-  });
-});
-
 experiment("load", () => {
   test("method not a function should throw", () => {
     const U = uboss();
@@ -58,9 +41,9 @@ experiment("load", () => {
     U.load({ methods: { test: () => 2 } });
     // load configuration
     U.load({ config });
-    // verify config is ok
-    U.verify();
-    expect(await U.fetch("test")()).to.be.equal(2);
+    // compose API
+    const API = U.compose();
+    expect(await API.test()).to.be.equal(2);
   });
 
   test("middleware that is not a function should throw", () => {
@@ -90,26 +73,10 @@ experiment("load", () => {
     U.load({ methods: { test: data => data } });
     U.load({ config });
 
-    U.verify();
-    expect(await U.fetch("test")()).to.be.equal(2);
-  });
-});
+    // compose API
+    const API = U.compose();
 
-experiment("verify", () => {
-  test("config referencing not loaded method should throw", () => {
-    const U = uboss();
-
-    const config = {
-      methods: {
-        upper: {}
-      }
-    };
-
-    // load configuration
-    U.load({ config });
-
-    // verify config is ok
-    expect(() => U.verify()).to.throw("method upper has not been loaded");
+    expect(await API.test()).to.be.equal(2);
   });
 
   test("config with a malformed middleware should throw", () => {
@@ -131,6 +98,23 @@ experiment("verify", () => {
       "beforeInvoke middleware chain, if set, should be an array"
     );
   });
+});
+
+experiment("compose", () => {
+  test("config referencing not loaded method should throw", () => {
+    const U = uboss();
+
+    const config = {
+      methods: {
+        upper: {}
+      }
+    };
+
+    // load configuration
+    U.load({ config });
+
+    expect(() => U.compose()).to.throw("method upper has not been loaded");
+  });
 
   test("config referencing a not loaded middleware should throw", () => {
     const U = uboss();
@@ -147,15 +131,20 @@ experiment("verify", () => {
 
     // load configuration
     U.load({ config });
+    expect(() => U.compose()).to.throw("middleware nonExisting has not been loaded");
 
-    // verify config is ok
-    expect(() => U.verify()).to.throw(
-      "middleware nonExisting has not been loaded"
-    );
   });
 });
 
 experiment("exec method", () => {
+  test("non configured method should throw", () => {
+    const U = uboss();
+    const API = U.compose();
+
+    expect(() => API.whatever()).to.throw(
+      "API.whatever is not a function"
+    );
+  });
   test("value returning", async () => {
     const U = uboss();
     const methods = {
@@ -170,10 +159,11 @@ experiment("exec method", () => {
     U.load({ methods });
     // load configuration
     U.load({ config });
-    // verify config is ok
-    U.verify();
 
-    expect(await U.fetch("upper")("ciao")).to.be.equal("CIAO");
+    // compose API
+    const API = U.compose();
+
+    expect(await API.upper("ciao")).to.be.equal("CIAO");
   });
 
   test("promise returning", async () => {
@@ -193,10 +183,11 @@ experiment("exec method", () => {
     U.load({ methods });
     // load configuration
     U.load({ config });
-    // verify config is ok
-    U.verify();
 
-    expect(await U.fetch("upper")("ciao")).to.be.equal("CIAO");
+    // compose API
+    const API = U.compose();
+
+    expect(await API.upper("ciao")).to.be.equal("CIAO");
   });
 
   test("with value returning beforeInvoke middleware", async () => {
@@ -216,8 +207,10 @@ experiment("exec method", () => {
 
     U.load({ config });
 
-    U.verify();
-    expect(await U.fetch("increase")(1)).to.be.equal(3);
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(3);
   });
 
   test("with value returning afterInvoke middleware", async () => {
@@ -237,8 +230,10 @@ experiment("exec method", () => {
 
     U.load({ config });
 
-    U.verify();
-    expect(await U.fetch("increase")(1)).to.be.equal(3);
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(3);
   });
 
   test("with promise returning middleware", async () => {
@@ -267,8 +262,10 @@ experiment("exec method", () => {
 
     U.load({ config });
 
-    U.verify();
-    expect(await U.fetch("increase")(1)).to.be.equal(3);
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(3);
   });
 
   test("with both afterInvoke and beforeInvoke middleware", async () => {
@@ -289,8 +286,10 @@ experiment("exec method", () => {
 
     U.load({ config });
 
-    U.verify();
-    expect(await U.fetch("increase")(1)).to.be.equal(4);
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(4);
   });
 
   test("with middleware that throws synchronously", async () => {
@@ -317,9 +316,10 @@ experiment("exec method", () => {
 
     U.load({ config });
 
-    U.verify();
+    // compose API
+    const API = U.compose();
 
-    await U.fetch("increase")("ciao")
+    await API.increase("ciao")
       .then(() => fail("should not execute this"))
       .catch(e => {
         expect(e).to.be.an.error("sync Error");
@@ -352,9 +352,10 @@ experiment("exec method", () => {
 
     U.load({ config });
 
-    U.verify();
+    // compose API
+    const API = U.compose();
 
-    await U.fetch("increase")("ciao")
+    await API.increase("ciao")
       .then(() => fail("should not execute this"))
       .catch(e => {
         expect(e).to.be.an.error("sync Error");
@@ -392,8 +393,10 @@ experiment("exec method", () => {
 
     U.load({ config });
 
-    U.verify();
-    await U.fetch("increase")("ciao")
+    // compose API
+    const API = U.compose();
+
+    await API.increase("ciao")
       .then(() => fail("should not execute this"))
       .catch(e => {
         expect(e).to.be.an.error("async Error");
@@ -431,8 +434,10 @@ experiment("exec method", () => {
 
     U.load({ config });
 
-    U.verify();
-    await U.fetch("increase")("ciao")
+    // compose API
+    const API = U.compose();
+
+    await API.increase("ciao")
       .then(() => fail("should not execute this"))
       .catch(e => {
         expect(e).to.be.an.error("async Error");
@@ -462,7 +467,11 @@ experiment("exec method", () => {
     });
 
     U.load({ config });
-    expect(await U.fetch("increase")(1)).to.be.equal(11);
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(11);
   });
 
   test("with afterInvoke middleware that interrupts the chain", async () => {
@@ -487,6 +496,10 @@ experiment("exec method", () => {
     });
 
     U.load({ config });
-    expect(await U.fetch("increase")(1)).to.be.equal(12);
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(12);
   });
 });

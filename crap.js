@@ -1,4 +1,6 @@
-const U = require('./index2')();
+const test = {
 
+};
 
-U.fetch("whatever");
+test.pippo();
+console.log('ciao');

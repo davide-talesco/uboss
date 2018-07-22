@@ -3,7 +3,8 @@
 This module provides an interface to declaratively defines your methods.
 
 At its simplest form you simply pass a list of unary functions (functions should take a single `argument`, which throughout 
-this document is called `request`) and you get back an object that exposes those functions as methods.
+this document is called `request`) and you get back an object that exposes those functions as methods that wraps the result
+of the original method around a Promise.
 
 Functions must either return a value, a Promise and can throw errors both synchronously and asynchronously.
 
@@ -30,14 +31,13 @@ U.load({ methods });
 // load configuration
 U.load({ config });
 
-// verify config is ok
-U.verify();
+// build API
+const API = U.compose();
 
-U.fetch('upper')('ciao') // => 'CIAO'
-U.fetch('lower')('ciao') // => 'ciao'
-U.fetch('notUsed')('ciao') // => Error: method notUsed has not been configured;
-U.fetch('nonExisting')('ciao') // => Error: method unknown has not been configured;
-
+API.upper('ciao').then(console.log); // => 'CIAO'
+API.lower('ciao').then(console.log); // => 'ciao'
+API.notUsed('ciao') // => Throw synchronously : TypeError: API.notUsed is not a function
+API.nonExisting('ciao') // => Throw synchronously : TypeError: API.nonExisting is not a function
 ```
 
 This is not very useful yet but it is the building block to provide additional capabilities.
@@ -116,13 +116,12 @@ U.load({ methods });
 // load configuration
 U.load({ config });
 
-// verify config is ok
-U.verify();
+// build API
+const API = U.compose();
 
-U.fetch('upper')('ciao') // => 'CIAOCIAO'
-U.fetch('lower')('ciao') // => 'ciaociao'
-U.fetch('ciao')('davide') // => 'hello'
-
+API.upper('ciao').then(console.log); // => 'CIAOCIAO'
+API.lower('ciao').then(console.log); // => 'ciaociao'
+API.ciao('davide') // => 'hello'
 ```
 
 The function returned by fetch will be a composition of middleware functions and the source function as per config.

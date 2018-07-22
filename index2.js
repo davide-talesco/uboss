@@ -65,9 +65,8 @@ const UBOSS = stampit({
     }
   ],
   methods: {
-    verify: verify,
-    load: load,
-    fetch: fetch
+    compose: compose,
+    load: load
   }
 });
 
@@ -100,7 +99,7 @@ function load(o = {}) {
   }
 }
 
-function verify() {
+function compose(){
   const config = this._config;
   const methods = this._methods;
   const middlewares = this._middlewares;
@@ -119,31 +118,28 @@ function verify() {
       });
     });
   });
-}
 
-function fetch(methodName) {
-  const config = this._config;
-  const methods = this._methods;
-  const middlewares = this._middlewares;
+  // initialize API object
+  const API = {};
 
-  if (!this._config.methods[methodName]) {
-    throw new Error(`method ${methodName} has not been configured`);
-  }
-  // method to execute
-  const method = methods[methodName];
+  // Setup API methods
+  Object.keys(config.methods).map(methodName => {
+    // pick method to execute
+    const method = methods[methodName];
 
-  // list of configured middlewares
-  const beforeInvokeMiddlewares = config.methods[methodName].middlewares.beforeInvoke.map(name => middlewares[name]);
-  const afterInvokeMiddlewares = config.methods[methodName].middlewares.afterInvoke.map(name => middlewares[name]);
+    // pick configured middlewares
+    const beforeInvokeMiddlewares = config.methods[methodName].middlewares.beforeInvoke.map(name => middlewares[name]);
+    const afterInvokeMiddlewares = config.methods[methodName].middlewares.afterInvoke.map(name => middlewares[name]);
 
-  const pipeline = [
-    ...beforeInvokeMiddlewares,
-    method,
-    ...afterInvokeMiddlewares
-  ];
+    // build the ordered function pipeline
+    const pipeline = [
+      ...beforeInvokeMiddlewares,
+      method,
+      ...afterInvokeMiddlewares
+    ];
 
-  return req =>
-    new Promise((resolve, reject) => {
+    // build the composed function
+    const fn = req => new Promise((resolve, reject) => {
 
       // then a list of functions
       const compose = functions =>
@@ -158,8 +154,13 @@ function fetch(methodName) {
       compose(pipeline)(Promise.resolve(req))
         .then(resolve)
         .catch(reject)
-
     });
+
+    // set the function on the API
+    API[methodName] = fn;
+  })
+
+  return API;
 }
 
 module.exports = UBOSS;
