@@ -122,7 +122,7 @@ const UBOSS = stampit({
 
       // initialize the roles list
       instance._roles = [];
-    },
+    }
   ],
   methods:{
     load: function load(options = {}){

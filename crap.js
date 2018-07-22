@@ -1,37 +1,17 @@
-const UB = require('./index');
+const U = require('./index2')();
 
-const acl = {
-  method: 'increase',
-  attributes: [{
-    path: 'requestor.tags',
-    include: 'admin'
-  }, {
-    path: 'requestor.tags',
-    include: 'user'
-  }]
-};
+U.load({ methods: { upper: data => data.toUpperCase() } });
 
-const metadata1 = {
-  requestor: {
-    tags: ['admin', 'user']
+const config = {
+  upper: {
+    middlewares: {
+      beforeInvoke: {}
+    }
   }
 };
 
-const metadata2 = {
-  requestor: {
-    tags: ['user']
-  }
-};
+// load configuration
+U.load({ config });
 
-const metadata3 = {
-  requestor: {
-    tags: ['something else']
-  }
-};
-
-const uboss = UB();
-uboss.load({methods: 'increase'});
-uboss.load({acl: acl});
-uboss.ready();
-
-console.log(uboss.exec({ method: 'increase', metadata: metadata1}))
+// verify config is ok
+U.verify()

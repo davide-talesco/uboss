@@ -4,7 +4,7 @@
   "description": "A lightweight authorization framework",
   "main": "index.js",
   "directories": {
-    "test": "test"
+    "test": "test2"
   },
   "scripts": {
     "test": "lab --assert code --coverage"

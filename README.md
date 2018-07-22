@@ -3,9 +3,10 @@
 This module provides a light and non opinionated framework to authorize method execution. The basic idea is that you have 
 a method that you want to expose behind authorization and some ACL that you want to configure on the method.
 
+It also gives you the options to run a middleware functions pipeline 
 # USAGE
 
-First you initialize an UBOSS instance, then you load the ACL and the methods.
+First you initialize an UBOSS instance, then you load the ACL the methods and optionally some roles.
 
 You run the `ready` method to validate every method has at least one ACL bound to it.
 
