@@ -4,6 +4,7 @@ This module provides a light and non opinionated framework to authorize method e
 a method that you want to expose behind authorization and some ACL that you want to configure on the method.
 
 It also gives you the options to run a middleware functions pipeline 
+
 # USAGE
 
 First you initialize an UBOSS instance, then you load the ACL the methods and optionally some roles.

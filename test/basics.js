@@ -29,7 +29,7 @@ experiment("load", () => {
     );
   });
 
-  test("2 methods with same name", async () => {
+  test("2 methods with same name, last wins", async () => {
     const U = uboss();
     const config = {
       methods: {
@@ -46,7 +46,7 @@ experiment("load", () => {
     expect(await API.test()).to.be.equal(2);
   });
 
-  test("middleware that is not a function should throw", () => {
+  test("middleware not a function should throw", () => {
     const U = uboss();
 
     const middlewares = {
@@ -58,7 +58,7 @@ experiment("load", () => {
     );
   });
 
-  test("2 middlewares with same name", async () => {
+  test("2 middlewares with same name, last wins", async () => {
     const U = uboss();
     const config = {
       methods: {
@@ -98,9 +98,64 @@ experiment("load", () => {
       "beforeInvoke middleware chain, if set, should be an array"
     );
   });
+
+  test("role not a function should throw", () => {
+    const U = uboss();
+
+    const roles = {
+      test: "pippo"
+    };
+
+    expect(() => U.load({ roles })).to.throw(
+      "role test must be a function"
+    );
+  });
+
+  test("2 roles with same name, last wins", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        test: {
+          acl: {
+            roles: ['test']
+          }
+        }
+      }
+    };
+    U.load({ roles: { test: () => false } });
+    U.load({ roles: { test: () => true } });
+
+    U.load({ methods: { test: data => data } });
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.test(2)).to.be.equal(2);
+  });
+
 });
 
 experiment("compose", () => {
+  test("config referencing not loaded role should throw", () => {
+    const U = uboss();
+    U.load({ methods: { upper: ()=> 1}})
+    const config = {
+      methods: {
+        upper: {
+          acl: {
+            roles: ['admin']
+          }
+        }
+      }
+    };
+
+    // load configuration
+    U.load({ config });
+
+    expect(() => U.compose()).to.throw("role admin has not been loaded");
+  });
+
   test("config referencing not loaded method should throw", () => {
     const U = uboss();
 
@@ -116,7 +171,7 @@ experiment("compose", () => {
     expect(() => U.compose()).to.throw("method upper has not been loaded");
   });
 
-  test("config referencing a not loaded middleware should throw", () => {
+  test("config referencing not loaded middleware should throw", () => {
     const U = uboss();
     U.load({ methods: { upper: data => data.toUpperCase() } });
     const config = {
@@ -137,6 +192,7 @@ experiment("compose", () => {
 });
 
 experiment("exec method", () => {
+
   test("non configured method should throw", () => {
     const U = uboss();
     const API = U.compose();
@@ -145,6 +201,7 @@ experiment("exec method", () => {
       "API.whatever is not a function"
     );
   });
+
   test("value returning", async () => {
     const U = uboss();
     const methods = {
@@ -502,4 +559,174 @@ experiment("exec method", () => {
 
     expect(await API.increase(1)).to.be.equal(12);
   });
+
+
+  test('with allowed role base acl', async () => {
+    const U = uboss();
+
+    const roles = {
+      admin: metadata => metadata.requestor === 'admin'
+    };
+
+    const methods = {
+      increase: req => ++req.value
+    };
+
+    const config = {
+      methods: {
+        increase: {
+          acl: {
+            roles: ['admin']
+          }
+        }
+      }
+    };
+
+
+    U.load({ roles });
+    U.load({ methods });
+    U.load({ config });
+
+    const API = U.compose();
+
+    const metadata = {
+      requestor : 'admin'
+    };
+
+    expect(await API.increase({ value: 1, metadata })).to.be.equal(2);
+
+  });
+
+  test('with not allowed role based acl should throw', async () => {
+    const U = uboss();
+
+    const roles = {
+      admin: metadata => metadata.requestor === 'admin'
+    };
+
+    const methods = {
+      increase: req => ++req.value
+    };
+
+    const config = {
+      methods: {
+        increase: {
+          acl: {
+            roles: ['admin']
+          }
+        }
+      }
+    };
+
+
+    U.load({ roles });
+    U.load({ methods });
+    U.load({ config });
+
+    const API = U.compose();
+
+    const metadata = {
+      requestor : 'user'
+    };
+
+    await API.increase({ value: 1, metadata })
+      .then(() => fail("should not execute this"))
+      .catch(e => {
+        expect(e).to.be.an.error("Unauthorized");
+        expect(e.statusCode).to.be.equal(403);
+      });
+
+  });
+
+  test('role throws an error synchronously should return Unauthorized', async () => {
+    const U = uboss();
+
+    const roles = {
+      admin: metadata => metadata.requestor.error.unknown === 'admin'
+    };
+
+    const methods = {
+      increase: req => ++req.value
+    };
+
+    const config = {
+      methods: {
+        increase: {
+          acl: {
+            roles: ['admin']
+          }
+        }
+      }
+    };
+
+
+    U.load({ roles });
+    U.load({ methods });
+    U.load({ config });
+
+    const API = U.compose();
+
+    const metadata = {
+      requestor : 'admin'
+    };
+
+    await API.increase({ value: 1, metadata })
+      .then(() => fail("should not execute this"))
+      .catch(e => {
+        expect(e).to.be.an.error("Unauthorized");
+        expect(e.statusCode).to.be.equal(403);
+      });
+
+  });
+
+  test.only('multi role acl', async () => {
+    const U = uboss();
+
+    const roles = {
+      admin: metadata => metadata.requestor === 'admin',
+      user: metadata => metadata.requestor === 'user'
+    };
+
+    const methods = {
+      increase: req => ++req.value
+    };
+
+    const config = {
+      methods: {
+        increase: {
+          acl: {
+            roles: ['admin', 'user']
+          }
+        }
+      }
+    };
+
+    U.load({ roles });
+    U.load({ methods });
+    U.load({ config });
+
+    const API = U.compose();
+
+    const metadata = {
+      requestor : 'admin'
+    };
+
+    const metadata2 = {
+      requestor : 'user'
+    };
+
+    const metadata3 = {
+      requestor : 'partner'
+    };
+
+    //expect(await API.increase({ value: 1, metadata })).to.be.equal(2);
+    expect(await API.increase({ value: 1, metadata: metadata2 })).to.be.equal(2);
+    await API.increase({ value: 1, metadata: metadata3 })
+      .then(() => fail("should not execute this"))
+      .catch(e => {
+        expect(e).to.be.an.error("Unauthorized");
+        expect(e.statusCode).to.be.equal(403);
+      });
+  });
+
 });
