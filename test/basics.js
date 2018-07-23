@@ -3,11 +3,11 @@
  * This file contains the unit tests of paip
  */
 
-'use strict';
-const _ = require('lodash');
-const UB = require('../index');
-const Lab = require('lab');
-const { expect } = require('code');
+"use strict";
+const _ = require("lodash");
+const uboss = require("../index");
+const Lab = require("lab");
+const { expect, fail } = require("code");
 
 // Test files must require the lab module, and export a test script
 const lab = (exports.lab = Lab.script());
@@ -16,629 +16,717 @@ const lab = (exports.lab = Lab.script());
 const experiment = lab.experiment;
 const test = lab.test;
 
-experiment('test load ', () => {
+experiment("load", () => {
+  test("method not a function should throw", () => {
+    const U = uboss();
 
-  test('valid method', () =>{
-    const uboss = UB();
-    uboss.load({methods: 'method1'});
-    expect(uboss.methods('method1')).to.be.equal('method1')
-  });
-
-  test('valid methods', () =>{
-    const uboss = UB();
-    uboss.load({methods: ['method1', 'method2']});
-    expect(uboss.methods('method1')).to.be.equal('method1')
-    expect(uboss.methods('method2')).to.be.equal('method2')
-    expect(uboss.methods().length).to.be.equal(2)
-  });
-
-  test('valid acl', () =>{
-    const uboss = UB();
-    const acl = {
-      method: 'method',
-      attribute: {
-        path: 'requestor.tags',
-        include: 'admin'
-      }
+    const methods = {
+      test: "pippo"
     };
 
-    uboss.load({acl: acl});
-    expect(uboss.acl().length).to.be.equal(1)
+    expect(() => U.load({ methods })).to.throw(
+      "method test must be a function"
+    );
   });
 
-  test('valid role', () =>{
-    const uboss = UB();
-
-    function owner(){
-
-    }
-    uboss.load({roles: owner});
-    expect(uboss.roles('owner').name).to.be.equal('owner')
-  });
-
-  test('unknown object type', () =>{
-    const uboss = UB();
-    const acl = {
-      method: 'method',
-      attribute: {
-        path: 'requestor.tags',
+  test("2 methods with same name, last wins", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        test: {}
       }
     };
-
-    expect(() => uboss.load({whatever: acl}))
-      .to.throw('Unsupported load options');
+    // load available methods
+    U.load({ methods: { test: () => 1 } });
+    U.load({ methods: { test: () => 2 } });
+    // load configuration
+    U.load({ config });
+    // compose API
+    const API = U.compose();
+    expect(await API.test()).to.be.equal(2);
   });
 
-});
+  test("middleware not a function should throw", () => {
+    const U = uboss();
 
-experiment('test load methods: ', () => {
-
-  test('already existing method should throw', () =>{
-    const uboss = UB();
-    uboss.load({methods: 'method1'});
-    expect(() => uboss.load({methods: 'method1'}))
-      .to.throw('method names must be unique');
-  });
-
-  test('malformed method is not a string should throw', () =>{
-    const uboss = UB();
-    expect(() => uboss.load({methods: { an: 'object'}}))
-      .to.throw('method must be a string');
-  });
-
-});
-
-experiment('test load acl', () => {
-
-  test('load malformed attribute based acl missing predicate', () =>{
-    const uboss = UB();
-    const acl = {
-      method: 'method',
-      attribute: {
-        path: 'requestor.tags',
-      }
+    const middlewares = {
+      test: "pippo"
     };
 
-    expect(() => uboss.load({acl: acl}))
-      .to.throw('exactly one predicate of include, equal must exist in ACL_ATTRIBUTE object');
+    expect(() => U.load({ middlewares })).to.throw(
+      "middleware test must be a function"
+    );
   });
 
-  test('malformed attribute/attribute based acl with no path property', () =>{
-    const uboss = UB();
-    const acl = {
-      method: 'increase',
-      attribute: {
-        path: 'id',
-        equal: {
-          'whatever': 'resource.owner'
+  test("2 middlewares with same name, last wins", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        test: {
+          middlewares: { beforeInvoke: ["test"] }
+        }
+      }
+    };
+    U.load({ middlewares: { test: () => 1 } });
+    U.load({ middlewares: { test: () => 2 } });
+
+    U.load({ methods: { test: data => data } });
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.test()).to.be.equal(2);
+  });
+
+  test("config with a malformed middleware should throw", () => {
+    const U = uboss();
+    U.load({ methods: { upper: data => data.toUpperCase() } });
+
+    const config = {
+      methods: {
+        upper: {
+          middlewares: {
+            beforeInvoke: {}
+          }
         }
       }
     };
 
-    expect(() => uboss.load({acl: acl}))
-      .to.throw('the value of the predicate of an ACL_ATTRIBUTE object must be either a string or an object with a path property whose type must be string');
+    // load configuration
+    expect(() => U.load({ config })).to.throw(
+      "beforeInvoke middleware chain, if set, should be an array"
+    );
   });
 
-  test('malformed attribute/attribute based acl with typeof predicate.path prop !== string', () =>{
-    const uboss = UB();
-    const acl = {
-      method: 'increase',
-      attribute: {
-        path: 'id',
-        equal: {
-          'path': {name: 'resource.owner'}
+  test("role not a function should throw", () => {
+    const U = uboss();
+
+    const roles = {
+      test: "pippo"
+    };
+
+    expect(() => U.load({ roles })).to.throw(
+      "role test must be a function"
+    );
+  });
+
+  test("2 roles with same name, last wins", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        test: {
+          acl: {
+            roles: ['test']
+          }
+        }
+      }
+    };
+    U.load({ roles: { test: () => false } });
+    U.load({ roles: { test: () => true } });
+
+    U.load({ methods: { test: data => data } });
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.test(2)).to.be.equal(2);
+  });
+
+});
+
+experiment("compose", () => {
+  test("config referencing not loaded role should throw", () => {
+    const U = uboss();
+    U.load({ methods: { upper: ()=> 1}})
+    const config = {
+      methods: {
+        upper: {
+          acl: {
+            roles: ['admin']
+          }
         }
       }
     };
 
-    expect(() => uboss.load({acl: acl}))
-      .to.throw('the value of the predicate of an ACL_ATTRIBUTE object must be either a string or an object with a path property whose type must be string');
+    // load configuration
+    U.load({ config });
+
+    expect(() => U.compose()).to.throw("role admin has not been loaded");
   });
 
-});
+  test("config referencing not loaded method should throw", () => {
+    const U = uboss();
 
-experiment('test load roles', () => {
-
-  test('load malformed role that is not a function', () =>{
-    const uboss = UB();
-
-    expect(() => uboss.load({roles: {}}))
-      .to.throw('role must be a function');
-  });
-
-  test('load duplicate role', () =>{
-    const uboss = UB();
-    function owner(){
-    }
-
-    uboss.load({roles: owner});
-    expect(() => uboss.load({roles: owner}))
-      .to.throw('roles must be unique');
-  });
-
-});
-
-experiment('test ready', ()=>{
-
-  test('no method', () => {
-    const uboss = UB();
-    uboss.ready()
-  });
-
-  test('valid method', () =>{
-    const uboss = UB();
-    const acl = {
-      method: 'method',
-      attribute: {
-        path: 'requestor.tags',
-        include: 'admin'
+    const config = {
+      methods: {
+        upper: {}
       }
     };
 
-    uboss.load({methods: 'method'});
-    uboss.load({acl: acl});
-    uboss.ready()
+    // load configuration
+    U.load({ config });
+
+    expect(() => U.compose()).to.throw("method upper has not been loaded");
   });
 
-  test('method missing acl should throw', () =>{
-    const uboss = UB();
-    const acl = {
-      method: 'method',
-      attribute: {
-        path: 'requestor.tags',
-        include: 'admin'
-      }
-    };
-
-    uboss.load({methods: 'method'});
-    uboss.load({methods: 'method1'});
-    uboss.load({methods: 'method1b'});
-    uboss.load({acl: acl});
-    expect(() => uboss.ready()).to.throw('unprotected Method: ["method1","method1b"]');
-  });
-
-  test('acl bound to multiple methods', () =>{
-    const uboss = UB();
-
-    const acl = {
-      methods: ['method', 'method1'],
-      attribute: {
-        path: 'requestor.tags',
-        include: 'admin'
-      }
-    };
-
-    uboss.load({methods: 'method'});
-    uboss.load({methods: 'method1'});
-    uboss.load({acl: acl});
-    uboss.ready()
-  });
-
-  test('acl referencing valid role', () => {
-    const uboss = UB();
-    const acl = { method: 'login', role: 'owner'};
-    function owner(){};
-
-    uboss.load({roles: owner});
-    uboss.load({acl: acl});
-    uboss.ready()
-  });
-
-  test('acl referencing non existing role should throw', () => {
-    const uboss = UB();
-    const acl = { method: 'login', role: 'owner'};
-
-    uboss.load({acl: acl});
-    expect(() => uboss.ready())
-      .to.throw('unknown Roles: ["owner"]');
-  });
-});
-
-experiment('test exec attribute based acl', () => {
-
-  test('include predicate', () => {
-    const acl = {
-      method: 'increase',
-      attribute: {
-        path: 'requestor.tags',
-        include: 'admin'
-      }
-    };
-
-    const metadata = {
-      requestor : {
-        tags: ['admin', 'internal']
-      }
-    }
-
-    const uboss = UB();
-    uboss.load({methods: 'increase'});
-    uboss.load({acl: acl});
-    uboss.ready();
-
-    expect(uboss.exec({ method: 'increase', metadata})).to.be.equal(true);
-
-  });
-
-  test('equal predicate', () => {
-    const acl = {
-      method: 'increase',
-      attribute: {
-        path: 'requestor.tags',
-        include: 'admin'
-      }
-    };
-
-    const metadata = {
-      requestor : {
-        tags: 'admin'
-      }
-    };
-
-    const uboss = UB();
-    uboss.load({methods: 'increase'});
-    uboss.load({acl: acl});
-    uboss.ready();
-
-    expect(uboss.exec({ method: 'increase', metadata})).to.be.equal(true);
-
-  });
-
-  test('include predicate, not authorized', () => {
-    const acl = {
-      method: 'increase',
-      attribute: {
-        path: 'requestor.tags',
-        include: 'admin'
-      }
-    };
-
-    const metadata = {
-      requestor: {
-        tags: ['other', 'internal']
-      }
-    };
-
-    const uboss = UB();
-    uboss.load({methods: 'increase'});
-    uboss.load({acl: acl});
-    uboss.ready();
-
-    expect(uboss.exec({ method: 'increase', metadata})).to.be.equal(false);
-
-  });
-
-  test('equal predicate, not authorized', () => {
-    const acl = {
-      method: 'increase',
-      attribute: {
-        path: 'requestor.tags',
-        equal: 'admin'
-      }
-    };
-
-    const metadata = {
-      requestor : {
-        tags: 'user'
-      }
-    };
-
-    const uboss = UB();
-    uboss.load({methods: 'increase'});
-    uboss.load({acl: acl});
-    uboss.ready();
-
-    expect(uboss.exec({ method: 'increase', metadata})).to.be.equal(false);
-
-  });
-
-  test('include predicate on non array property', () => {
-    const acl = {
-      method: 'increase',
-      attribute: {
-        path: 'requestor.tags',
-        include: 'admin'
-      }
-    };
-
-    const metadata = {
-      requestor: {
-        tags: 'pippo'
-      }
-    };
-
-    const uboss = UB();
-    uboss.load({methods: 'increase'});
-    uboss.load({acl: acl});
-    uboss.ready();
-
-    expect(uboss.exec({ method: 'increase', metadata})).to.be.equal(false);
-
-  });
-
-  test('equal predicate on non string property', () => {
-    const acl = {
-      method: 'increase',
-      attribute: {
-        path: 'requestor.tags',
-        equal: 'admin'
-      }
-    };
-
-    const metadata = {
-      requestor: {
-        tags: ['admin']
-      }
-    };
-
-    const uboss = UB();
-    uboss.load({methods: 'increase'});
-    uboss.load({acl: acl});
-    uboss.ready();
-
-    expect(uboss.exec({ method: 'increase', metadata})).to.be.equal(false);
-
-  });
-
-  test('non existing attribute path', () => {
-    const acl = {
-      method: 'increase',
-      attribute: {
-        path: 'requestor.whatever',
-        equal: 'admin'
-      }
-    };
-
-    const metadata = {
-      requestor: {
-        tags: ['admin']
-      }
-    };
-
-    const uboss = UB();
-    uboss.load({methods: 'increase'});
-    uboss.load({acl: acl});
-    uboss.ready();
-
-    expect(uboss.exec({ method: 'increase', metadata})).to.be.equal(false);
-
-  });
-
-  test('attribute/attribute based ACL', () => {
-    const acl = {
-      method: 'increase',
-      attribute: {
-        path: 'requestor.id',
-        equal: {
-          'path': 'resource.owner'
+  test("config referencing not loaded middleware should throw", () => {
+    const U = uboss();
+    U.load({ methods: { upper: data => data.toUpperCase() } });
+    const config = {
+      methods: {
+        upper: {
+          middlewares: {
+            beforeInvoke: ["nonExisting"]
+          }
         }
       }
     };
 
+    // load configuration
+    U.load({ config });
+    expect(() => U.compose()).to.throw("middleware nonExisting has not been loaded");
+
+  });
+});
+
+experiment("exec method", () => {
+
+  test("non configured method should throw", () => {
+    const U = uboss();
+    const API = U.compose();
+
+    expect(() => API.whatever()).to.throw(
+      "API.whatever is not a function"
+    );
+  });
+
+  test("value returning", async () => {
+    const U = uboss();
+    const methods = {
+      upper: data => data.toUpperCase()
+    };
+    const config = {
+      methods: {
+        upper: {}
+      }
+    };
+    // load available methods
+    U.load({ methods });
+    // load configuration
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.upper("ciao")).to.be.equal("CIAO");
+  });
+
+  test("promise returning", async () => {
+    const U = uboss();
+    const methods = {
+      upper: data =>
+        new Promise(resolve =>
+          setTimeout(() => resolve(data.toUpperCase()), 10)
+        )
+    };
+    const config = {
+      methods: {
+        upper: {}
+      }
+    };
+    // load available methods
+    U.load({ methods });
+    // load configuration
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.upper("ciao")).to.be.equal("CIAO");
+  });
+
+  test("with value returning beforeInvoke middleware", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        increase: {
+          middlewares: {
+            beforeInvoke: ["increase"]
+          }
+        }
+      }
+    };
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({ middlewares: { increase: num => ++num } });
+
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(3);
+  });
+
+  test("with value returning afterInvoke middleware", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        increase: {
+          middlewares: {
+            afterInvoke: ["increase"]
+          }
+        }
+      }
+    }
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({ middlewares: { increase: num => ++num } });
+
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(3);
+  });
+
+  test("with promise returning middleware", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        increase: {
+          middlewares: {
+            afterInvoke: ["increase"]
+          }
+        }
+      }
+    }
+
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({
+      middlewares: {
+        increase: num => {
+          return new Promise(resolve => {
+            setTimeout(() => resolve(++num), 10);
+          });
+        }
+      }
+    });
+
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(3);
+  });
+
+  test("with both afterInvoke and beforeInvoke middleware", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        increase: {
+          middlewares: {
+            beforeInvoke: ["increase"],
+            afterInvoke: ["increase"]
+          }
+        }
+      }
+    };
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({ middlewares: { increase: num => ++num } });
+
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(4);
+  });
+
+  test("with middleware that throws synchronously", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        increase: {
+          middlewares: {
+            beforeInvoke: ["increase"],
+            afterInvoke: ["increase"]
+          }
+        }
+      }
+    };
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({
+      middlewares: {
+        increase: num => {
+          throw new Error("sync Error");
+        }
+      }
+    });
+
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    await API.increase("ciao")
+      .then(() => fail("should not execute this"))
+      .catch(e => {
+        expect(e).to.be.an.error("sync Error");
+      });
+  });
+
+  test("middleware that throws synchronously with statusCode", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        increase: {
+          middlewares: {
+            beforeInvoke: ["increase"],
+            afterInvoke: ["increase"]
+          }
+        }
+      }
+    };
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({
+      middlewares: {
+        increase: num => {
+          const err = new Error("sync Error");
+          err.statusCode = 400;
+          throw err;
+        }
+      }
+    });
+
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    await API.increase("ciao")
+      .then(() => fail("should not execute this"))
+      .catch(e => {
+        expect(e).to.be.an.error("sync Error");
+        expect(e.statusCode).to.be.equal(400);
+      });
+  });
+
+  test("middleware that reject asynchronously", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        increase: {
+          middlewares: {
+            beforeInvoke: ["increase"],
+            afterInvoke: ["increase"]
+          }
+        }
+      }
+    }
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({
+      middlewares: {
+        increase: num => {
+          return new Promise((resolve, reject) => {
+            setTimeout(() => {
+              const err = new Error("async Error");
+              err.statusCode = 400;
+              reject(err);
+            }, 10);
+          });
+        }
+      }
+    });
+
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    await API.increase("ciao")
+      .then(() => fail("should not execute this"))
+      .catch(e => {
+        expect(e).to.be.an.error("async Error");
+        expect(e.statusCode).to.be.equal(400);
+      });
+  });
+
+  test("middleware that throws asynchronously, (this should never happen right?)", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        increase: {
+          middlewares: {
+            beforeInvoke: ["increase"],
+            afterInvoke: ["increase"]
+          }
+        }
+      }
+    }
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({
+      middlewares: {
+        increase: num => {
+          return new Promise((resolve, reject) => {
+            setTimeout(() => {
+              const err = new Error("async Error");
+              err.statusCode = 400;
+              throw err;
+            }, 10);
+          });
+        }
+      }
+    });
+
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    await API.increase("ciao")
+      .then(() => fail("should not execute this"))
+      .catch(e => {
+        expect(e).to.be.an.error("async Error");
+        expect(e.statusCode).to.be.equal(400);
+      });
+  });
+
+  test("with beforeInvoke middleware that interrupts the chain", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        increase: {
+          middlewares: {
+            beforeInvoke: ["increase"]
+          }
+        }
+      }
+    }
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({
+      middlewares: {
+        increase: (num, res) => {
+          res(num + 10);
+        }
+      }
+    });
+
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(11);
+  });
+
+  test("with afterInvoke middleware that interrupts the chain", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        increase: {
+          middlewares: {
+            afterInvoke: ["increase"]
+          }
+        }
+      }
+    }
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({
+      middlewares: {
+        increase: (num, res) => {
+          res(num + 10);
+        }
+      }
+    });
+
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(12);
+  });
+
+
+  test('with allowed role base acl', async () => {
+    const U = uboss();
+
+    const roles = {
+      admin: metadata => metadata.requestor === 'admin'
+    };
+
+    const methods = {
+      increase: req => ++req.value
+    };
+
+    const config = {
+      methods: {
+        increase: {
+          acl: {
+            roles: ['admin']
+          }
+        }
+      }
+    };
+
+
+    U.load({ roles });
+    U.load({ methods });
+    U.load({ config });
+
+    const API = U.compose();
+
     const metadata = {
-      requestor : {
-        id: 123,
-        tags: ['admin', 'internal']
-      },
-      resource :  {
-        owner: 123
-      }
+      requestor : 'admin'
     };
 
-    const uboss = UB();
-    uboss.load({methods: 'increase'});
-    uboss.load({acl: acl});
-    uboss.ready();
-
-    expect(uboss.exec({ method: 'increase', metadata })).to.be.equal(true);
-  })
-
-  test('non existing method', () => {
-    const acl = {
-      method: 'increase',
-      attribute: {
-        path: 'requestor.whatever',
-        equal: 'admin'
-      }
-    };
-
-    const metadata = {
-      requestor: {
-        tags: ['admin']
-      }
-    };
-
-    const uboss = UB();
-    uboss.load({methods: 'increase'});
-    uboss.load({acl: acl});
-    uboss.ready();
-
-    expect(() => uboss.exec({ method: 'unknown', metadata})).to.throw('method unknown does not exists');
+    expect(await API.increase({ value: 1, metadata })).to.be.equal(2);
 
   });
 
-  test('multi attribute acl', () => {
-    const acl = {
-      method: 'increase',
-      attributes: [{
-        path: 'requestor.tags',
-        include: 'admin'
-      }, {
-        path: 'requestor.role',
-        equal: 'user'
-      }]
+  test('with not allowed role based acl should throw', async () => {
+    const U = uboss();
+
+    const roles = {
+      admin: metadata => metadata.requestor === 'admin'
     };
 
-    // both valid
-    const metadata1 = {
-      requestor: {
-        tags: ['admin'],
-        role: 'user'
+    const methods = {
+      increase: req => ++req.value
+    };
+
+    const config = {
+      methods: {
+        increase: {
+          acl: {
+            roles: ['admin']
+          }
+        }
       }
     };
 
-    // only one valid
+
+    U.load({ roles });
+    U.load({ methods });
+    U.load({ config });
+
+    const API = U.compose();
+
+    const metadata = {
+      requestor : 'user'
+    };
+
+    await API.increase({ value: 1, metadata })
+      .then(() => fail("should not execute this"))
+      .catch(e => {
+        expect(e).to.be.an.error("Unauthorized");
+        expect(e.statusCode).to.be.equal(403);
+      });
+
+  });
+
+  test('role throws an error synchronously should return Unauthorized', async () => {
+    const U = uboss();
+
+    const roles = {
+      admin: metadata => metadata.requestor.error.unknown === 'admin'
+    };
+
+    const methods = {
+      increase: req => ++req.value
+    };
+
+    const config = {
+      methods: {
+        increase: {
+          acl: {
+            roles: ['admin']
+          }
+        }
+      }
+    };
+
+
+    U.load({ roles });
+    U.load({ methods });
+    U.load({ config });
+
+    const API = U.compose();
+
+    const metadata = {
+      requestor : 'admin'
+    };
+
+    await API.increase({ value: 1, metadata })
+      .then(() => fail("should not execute this"))
+      .catch(e => {
+        expect(e).to.be.an.error("Unauthorized");
+        expect(e.statusCode).to.be.equal(403);
+      });
+
+  });
+
+  test.only('multi role acl', async () => {
+    const U = uboss();
+
+    const roles = {
+      admin: metadata => metadata.requestor === 'admin',
+      user: metadata => metadata.requestor === 'user'
+    };
+
+    const methods = {
+      increase: req => ++req.value
+    };
+
+    const config = {
+      methods: {
+        increase: {
+          acl: {
+            roles: ['admin', 'user']
+          }
+        }
+      }
+    };
+
+    U.load({ roles });
+    U.load({ methods });
+    U.load({ config });
+
+    const API = U.compose();
+
+    const metadata = {
+      requestor : 'admin'
+    };
+
     const metadata2 = {
-      requestor: {
-        tags: ['admin']
-      }
+      requestor : 'user'
     };
 
-    // none valid
     const metadata3 = {
-      requestor: {
-        tags: ['something else']
-      }
+      requestor : 'partner'
     };
 
-    const uboss = UB();
-    uboss.load({methods: 'increase'});
-    uboss.load({acl: acl});
-    uboss.ready();
-
-    expect(uboss.exec({ method: 'increase', metadata: metadata1})).to.be.equal(true);
-    expect(uboss.exec({ method: 'increase', metadata: metadata2})).to.be.equal(true);
-    expect(uboss.exec({ method: 'increase', metadata: metadata3})).to.be.equal(false)
-  })
-});
-
-experiment('test exec role based acl', () => {
-
-  test('matching role', () => {
-    const acl = {
-      method: 'increase',
-      role: 'admin'
-    };
-
-    function admin(metadata){
-      return metadata.requestor.id === metadata.resource.owner;
-    }
-
-    const metadata = {
-      requestor : {
-        id: 1,
-        tags: ['admin', 'internal']
-      },
-      resource: {
-        owner: 1
-      }
-    }
-
-    const uboss = UB();
-    uboss.load({roles: admin});
-    uboss.load({methods: 'increase'});
-    uboss.load({acl: acl});
-    uboss.ready();
-
-    expect(uboss.exec({ method: 'increase', metadata})).to.be.equal(true);
-
+    //expect(await API.increase({ value: 1, metadata })).to.be.equal(2);
+    expect(await API.increase({ value: 1, metadata: metadata2 })).to.be.equal(2);
+    await API.increase({ value: 1, metadata: metadata3 })
+      .then(() => fail("should not execute this"))
+      .catch(e => {
+        expect(e).to.be.an.error("Unauthorized");
+        expect(e.statusCode).to.be.equal(403);
+      });
   });
-
-  test('non matching role should return false', () => {
-    const acl = {
-      method: 'increase',
-      role: 'admin'
-    };
-
-    function admin(metadata){
-      return metadata.requestor.id === metadata.resource.owner;
-    }
-
-    const metadata = {
-      requestor : {
-        id: 1,
-        tags: ['admin', 'internal']
-      },
-      resource: {
-        owner: 3
-      }
-    }
-
-    const uboss = UB();
-    uboss.load({roles: admin});
-    uboss.load({methods: 'increase'});
-    uboss.load({acl: acl});
-    uboss.ready();
-
-    expect(uboss.exec({ method: 'increase', metadata})).to.be.equal(false);
-
-  });
-
-  test('role throws an error synchronously should return false', () => {
-    const acl = {
-      method: 'increase',
-      role: 'admin'
-    };
-
-    function admin(metadata){
-      return metadata.error.id === metadata.error.owner;
-    }
-
-    const metadata = {
-      requestor : {
-        id: 1,
-        tags: ['admin', 'internal']
-      },
-      resource: {
-        owner: 1
-      }
-    };
-
-    const uboss = UB();
-    uboss.load({roles: admin});
-    uboss.load({methods: 'increase'});
-    uboss.load({acl: acl});
-    uboss.ready();
-
-    expect(uboss.exec({ method: 'increase', metadata})).to.be.equal(false);
-
-  });
-
-  test('multi role acl', () => {
-    const acl = {
-      method: 'increase',
-      roles: ['admin', 'user']
-    };
-
-    // both valid
-    const metadata1 = {
-      requestor: {
-        roles: ['admin', 'user']
-      }
-    };
-
-    // only one valid
-    const metadata2 = {
-      requestor: {
-        roles: ['admin']
-      }
-    };
-
-    // none valid
-    const metadata3 = {
-      requestor: {
-        roles: ['something else']
-      }
-    };
-
-    function admin(metadata){
-      return metadata.requestor.roles.includes('admin');
-    };
-
-    function user(metadata){
-      return metadata.requestor.roles.includes('user');
-    };
-
-    const uboss = UB();
-    uboss.load({methods: 'increase'});
-    uboss.load({acl: acl});
-    uboss.load({roles: admin})
-    uboss.load({roles: user})
-    uboss.ready();
-
-    expect(uboss.exec({ method: 'increase', metadata: metadata1})).to.be.equal(true);
-    expect(uboss.exec({ method: 'increase', metadata: metadata2})).to.be.equal(true);
-    expect(uboss.exec({ method: 'increase', metadata: metadata3})).to.be.equal(false)
-  })
 
 });

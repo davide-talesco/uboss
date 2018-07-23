@@ -1,222 +1,250 @@
 const stampit = require("@stamp/it");
-const R = require('ramda');
-const _ = require('lodash');
-const assert = require('assert');
-
-const ACL_ATTRIBUTE = stampit({
-  initializers: [
-    function ({ path, include, equal }){
-      this.path = path;
-      include ? this.predicate = 'include' : equal ? this.predicate = 'equal' : '';
-      this.value = include || equal;
-
-      assert(path, "path must exist in ACL_ATTRIBUTE object");
-      assert(this.predicate, "exactly one predicate of include, equal must exist in ACL_ATTRIBUTE object");
-      assert(this.value, "the value of the predicate object must exist in ACL_ATTRIBUTE object");
-
-      // verify that this.value is either a string or an object with a path property
-      assert(typeof this.value === 'string' ||
-        (this.value.path &&
-         typeof this.value.path === 'string'),
-        "the value of the predicate of an ACL_ATTRIBUTE object must be either a string or an object with a path property whose type must be string");
-    }
-  ],
-  methods: {
-    evaluate : function (metadata = {}) {
-      // ACL have subject, value and a predicate
-      const subject = R.path(this.path.split('.'), metadata);
-      // value might be a string or an object with a path property
-      const value = typeof this.value === 'string' ? this.value : R.path(this.value.path.split('.'), metadata);
-
-      try{
-        switch(this.predicate) {
-          case 'include':
-            return subject.includes(value);
-            break;
-          case 'exlcude':
-            return !subject.includes(value);
-            break;
-          case 'equal':
-            return subject === value;
-            break;
-          default:
-            return false
-        }
-      }
-      catch(e){
-        return false;
-      }
-    }
-  }
-});
-
-const ROLE_BASED_ACL = stampit({
-  initializers: [
-    function ({ role, roles }){
-
-      assert(!(role && roles), 'only one between role and roles property is allowed in role based acl');
-
-      // TODO support multiple roles
-      if (role || roles ) {
-        this.roles = _.castArray(role || roles);
-        this.kind = 'role';
-        // override ACL evaluate method with attribute based method evaluation
-        this.evaluate = (metadata, uboss) => {
-          const roleFnList = this.roles.map(role => uboss.roles(role));
-          return roleFnList.map(roleFn => {
-            try{
-              return roleFn(metadata);
-            }
-            catch(e){
-              return false
-            }
-          }).reduce((acc, currValue) => acc || currValue, false)
-        }
-      };
-    }
-  ]
-});
-
-const ATTRIBUTE_BASED_ACL = stampit({
-  initializers: [
-    function ({ attribute, attributes }){
-
-      assert(!(attribute && attributes), 'only one between attribute and attributes property is allowed in attribute based acl');
-
-      if (attribute || attributes ) {
-        this.attributes = _.castArray(attribute || attributes).map(ACL_ATTRIBUTE);
-        // override ACL evaluate method with attribute based method evaluation
-        this.evaluate = function(metadata){
-          return this.attributes
-            .map(attribute => attribute.evaluate.call(attribute, metadata))
-            // if any of the attribute evaluate to true the acl evaluate to true
-            .reduce((acc, currValue) => acc || currValue, false);
-        }
-      };
-    }
-  ]
-});
+const _ = require("lodash");
+const assert = require("assert");
 
 const ACL = stampit({
   initializers: [
-    function ({ method, methods }){
+    // initialize role based acl
+    function({ roles = [] }) {
+      this.roles = [];
 
-      assert(!(method && methods), 'only one between method and methods property is allowed in acl');
+      assert(_.isArray(roles), "acl.roles if set must be an array");
 
-      this.methods = _.castArray(method || methods);
+      roles.map(role => {
+        assert(_.isString(role), "acl.roles.role must be a string");
 
-      assert(this.methods.length > 0, "method || methods must exist in ACL object");
+        this.roles.push(role);
+      });
     }
-  ]
-}).compose(ATTRIBUTE_BASED_ACL)
-  .compose(ROLE_BASED_ACL);
-
-const UBOSS = stampit({
-  initializers: [
-    function ({}, { instance }) {
-      // initialize the methods list
-      instance._methods = [];
-
-      // initialize the acl list
-      instance._acl = [];
-
-      // initialize the roles list
-      instance._roles = [];
-    },
   ],
-  methods:{
-    load: function load(options = {}){
-
-      if (options.methods){
-        const methods = _.castArray(options.methods);
-
-        methods.map(method => {
-          assert(typeof method === 'string', "method must be a string");
-          assert(!R.find(R.equals(method), this._methods), 'method names must be unique');
-
-          // push the method to this instance methods object
-          this._methods.push(method);
-        })
+  methods: {
+    compose: function({ roles }) {
+      // pick list of roleFn mapped to this acl
+      const roleFnList = this.roles.map(role => roles[role]);
+      // if no roles have been provided there is nothing to authorize
+      if (roleFnList.length === 0){
+        return () => true;
       }
-      else if (options.acl){
-        // initialize acl
-        const aclList = _.castArray(options.acl);
-        aclList.map(ACL)
-        // push the method to this instance acl list
-          .map(acl => this._acl.push(acl))
-      }
-      else if (options.roles){
-
-        const roles = _.castArray(options.roles);
-        roles.map(role => {
-          // initialize method
-          assert(typeof role === 'function', "role must be a function");
-          assert(!R.find(R.equals(role.name), this._roles.map(r => r.name)), 'roles must be unique');
-          // push the method to this instance method list
-          this._roles.push(role);
-        })
-      }
-      else {
-        throw new Error('Unsupported load options')
-      }
-    },
-    ready: function ready(){
-
-      // check that for each method there is at least one acl
-      const unprotectedMethods = this._methods
-        .filter(m => R.any(acl => {
-          return !acl.methods.includes(m)
-        }, this._acl));
-
-      if (unprotectedMethods.length > 0){
-        throw new Error(`unprotected Method: ${JSON.stringify(unprotectedMethods)}`)
-      }
-
-      // check that for each role acl there is a registered role
-      const unknownRoles = this._acl
-        .filter(acl => acl.kind === 'role')
-        // [acl1, acl2, acl3]
-        .map(acl => acl.roles)
-        // [[role1], [role2, role3], [role3]]
-        .reduce((a, v) => a.concat(v), [])
-        // [role1, role2, role3, role3]
-        .filter(role => !this._roles.map(r => r.name).includes(role));
-
-      if (unknownRoles.length > 0){
-        throw new Error(`unknown Roles: ${JSON.stringify(unknownRoles)}`)
-      }
-    },
-    exec: function exec(req = {}){
-
-      const method = req.method;
-
-      assert(method, 'Request must have a method property');
-      assert(R.find(R.equals(method), this._methods), `method ${method} does not exists`);
-
-      // evaluate all ACL bound to this method and return true if at least one acl evaluated true
-      return this.acl(method)
-        .map(acl => acl.evaluate(req.metadata, this))
-        .reduce((acc, currentValue) => acc || currentValue, false);
-    },
-    methods: function methods( name ){
-      if (name) return R.clone(R.find(R.equals(name), this._methods));
-      return R.clone(this._methods);
-    },
-    acl: function acl( methodName ){
-      if (methodName)
-        return R.clone(R.filter( acl => acl.methods.includes(methodName), this._acl));
-      return R.clone(this._acl);
-    },
-    roles: function roles( name ){
-      const roles = this._roles;
-      if (name){
-        return R.clone(R.find( r => {
-          return r.name === name
-        }, roles));
-      }
-      return R.clone(this._roles);
+      // return a function that takes a metadata object and return true or false
+      return metadata =>
+        roleFnList
+          .map(roleFn => {
+            try {
+              return roleFn(metadata);
+            } catch (e) {
+              return false;
+            }
+          })
+          .reduce((acc, currValue) => acc || currValue, false);
     }
   }
 });
+
+const METHOD = stampit({
+  initializers: [
+    // initialize middlewares
+    function({ middlewares = {} }) {
+      const phases = ["beforeAuth", "beforeInvoke", "afterInvoke"];
+
+      assert(_.isObject(middlewares), "middlewares if set must be an object");
+
+      this.middlewares = {};
+      phases.map(phase => {
+        this.middlewares[phase] = [];
+
+        // if phase object exist validate and push its keys
+        if (middlewares[phase]) {
+          // make sure phase is an array
+          assert(
+            _.isArray(middlewares[phase]),
+            `${phase} middleware chain, if set, should be an array`
+          );
+          // validate and push each
+          middlewares[phase].map(middleware => {
+            assert(middleware, "middlewares must be string");
+            this.middlewares[phase].push(middleware);
+          });
+        }
+      });
+    },
+    // initialize acl
+    function({ acl = {} }) {
+      assert(_.isObject(acl), "acl if set must be an object");
+
+      this.acl = ACL(acl);
+    }
+  ]
+});
+
+const CONFIG = stampit({
+  // initialize config methods
+  initializers: [
+    function({ methods = {} }) {
+      this.methods = {};
+      // config should be an object
+      assert(_.isObject(methods), "config methods property must be an object");
+
+      // each config key is a method
+      Object.keys(methods).map(method => {
+        // initialize the method
+        this.methods[method] = METHOD(methods[method]);
+      });
+    }
+  ]
+});
+
+const UBOSS = stampit({
+  initializers: [
+    function({}, { instance }) {
+      // initialize the available methods object
+      instance._methods = {};
+
+      // initialize the available middlewares object
+      instance._middlewares = {};
+
+      // initialize the config object
+      instance._config = CONFIG();
+
+      // initialize roles
+      instance._roles = {};
+    }
+  ],
+  methods: {
+    compose: compose,
+    load: load
+  }
+});
+
+// UBOSS METHODS
+function load(o = {}) {
+  if (o.methods) {
+    assert(_.isObject(o.methods), "methods should be an object");
+    // for each own property check is a function
+    Object.keys(o.methods).map(name => {
+      assert(
+        typeof o.methods[name] === "function",
+        `method ${name} must be a function`
+      );
+      // copy the method internally
+      this._methods[name] = o.methods[name];
+    });
+  } else if (o.roles) {
+    assert(_.isObject(o.roles), "roles should be an object");
+    // for each own property check is a function
+    Object.keys(o.roles).map(name => {
+      assert(
+        typeof o.roles[name] === "function",
+        `role ${name} must be a function`
+      );
+      // copy the method internally
+      this._roles[name] = o.roles[name];
+    });
+  } else if (o.middlewares) {
+    assert(_.isObject(o.middlewares), "middlewares should be an object");
+    // for each own property check is a function
+    Object.keys(o.middlewares).map(name => {
+      assert(
+        typeof o.middlewares[name] === "function",
+        `middleware ${name} must be a function`
+      );
+      // clone the middleware internally
+      this._middlewares[name] = o.middlewares[name];
+    });
+  } else if (o.config) {
+    this._config = CONFIG(o.config);
+  } else {
+    throw new Error("Unsupported load options");
+  }
+}
+
+function compose() {
+  const config = this._config;
+  const methods = this._methods;
+  const middlewares = this._middlewares;
+  const roles = this._roles;
+
+  // verify methods referenced in config are avaialble in uboss instance
+  Object.keys(config.methods).map(name => {
+    // verify method is available
+    assert(methods[name], `method ${name} has not been loaded`);
+
+    // verify any referenced middlewares is available
+    ["beforeAuth", "beforeInvoke", "afterInvoke"].map(phase => {
+      // for each middleware referenced in config check it is avaialble in uboss instance
+      config.methods[name].middlewares[phase].map(mName => {
+        assert(middlewares[mName], `middleware ${mName} has not been loaded`);
+      });
+    });
+
+    // verify any referenced role is available in uboss instance
+    config.methods[name].acl.roles.map(roleName => {
+      assert(roles[roleName], `role ${roleName} has not been loaded`);
+    });
+  });
+
+  // initialize API object
+  const API = {};
+
+  // Setup API methods
+  Object.keys(config.methods).map(methodName => {
+    // pick method to execute
+    const method = methods[methodName];
+
+    // pick acl list
+    const acl = config.methods[methodName].acl;
+
+    // build auth method
+    const auth = req => {
+      // perform acl evaluation
+      const allowed = acl.compose({ roles })(req.metadata);
+
+      if (allowed) return req;
+
+      const err = new Error("Unauthorized");
+      err.statusCode = 403;
+
+      throw err;
+    };
+
+    // pick configured middlewares
+    const beforeAuthMiddlewares = config.methods[
+      methodName
+    ].middlewares.beforeAuth.map(name => middlewares[name]);
+    const beforeInvokeMiddlewares = config.methods[
+      methodName
+    ].middlewares.beforeInvoke.map(name => middlewares[name]);
+    const afterInvokeMiddlewares = config.methods[
+      methodName
+    ].middlewares.afterInvoke.map(name => middlewares[name]);
+
+    // build the ordered function pipeline
+    const pipeline = [
+      ...beforeAuthMiddlewares,
+      auth,
+      ...beforeInvokeMiddlewares,
+      method,
+      ...afterInvokeMiddlewares
+    ];
+
+    // build the composed function
+    const fn = (req = {}) =>
+      new Promise((resolve, reject) => {
+        // then a list of functions
+        const compose = functions => initialValue =>
+          functions.reduce((p, fn) => {
+            return p.then(data => fn(data, resolve));
+          }, Promise.resolve(initialValue));
+
+        compose(pipeline)(Promise.resolve(req))
+          .then(resolve)
+          .catch(reject);
+      });
+
+    // set the function on the API
+    API[methodName] = fn;
+  });
+
+  return API;
+}
 
 module.exports = UBOSS;

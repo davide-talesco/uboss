@@ -1,169 +1,196 @@
 # UBOSS
 
-This module provides a light and non opinionated framework to authorize method execution. The basic idea is that you have 
-a method that you want to expose behind authorization and some ACL that you want to configure on the method.
+This module provides an interface to declaratively defines your methods.
 
-# USAGE
+At its simplest form you simply pass a list of unary functions (functions should take a single `argument`, which throughout 
+this document is called `request` ) and you get back an object that exposes those functions as methods that wraps the result
+of the original method around a Promise.
 
-First you initialize an UBOSS instance, then you load the ACL and the methods.
-
-You run the `ready` method to validate every method has at least one ACL bound to it.
-
-You call the `exec` method passing a `UBOSS request object` that contains the name of the method to call and 
-an optional metadata property which contains the data required to evaluate the ACL
-
-UBOSS will evaluate each ACL associated to the method and if at least one is successful will call the 
-method binding it with the original request arguments.
+Functions must either return a value, a Promise and can throw errors both synchronously and asynchronously.
 
 ```javascript
-const UB = require('uboss');
-const uboss = UB();
+const U = require('uboss')();
 
-const acl = {
-  method: 'doStuff',
-  attribute: {
-    path: 'requestor.roles',
-    include: 'admin'
+const methods = {
+  upper: data => data.toUpperCase(),
+  lower: data => data.toLowerCase(),
+  notUsed: data => data
+};
+
+// configure the methods you want to expose
+const config = {
+  methods: {
+      upper: {},
+      lower: {}
   }
 };
 
-uboss.load({methods: 'doStuff'});
-uboss.load({acl: acl});
+// load available methods
+U.load({ methods });
 
-uboss.exec({method: 'doStuff', metadata: {requestor: { roles: [ 'admin']}}}); // => true
+// load configuration
+U.load({ config });
 
-uboss.exec({method: 'doStuff', metadata: {requestor: { roles: [ 'user']}}}); // => false
+// build API
+const API = U.compose();
+
+API.upper('ciao').then(console.log); // => 'CIAO'
+API.lower('ciao').then(console.log); // => 'ciao'
+API.notUsed('ciao') // => Throw synchronously : TypeError: API.notUsed is not a function
+API.nonExisting('ciao') // => Throw synchronously : TypeError: API.nonExisting is not a function
 ```
 
-# ACL
+This is not very useful yet but it is the building block to provide additional capabilities.
+Enter Middlewares.
 
-ACL are bound to methods via their `method` or `methods` properties. ACL support 2 predicates `include` and `equal`.
-There are 2 kind of acl: **attribute based**, for simple checks where we want two values or **role based** acl for more
-complex rules.
- 
+Please Note **methods** are loaded by name, so if you load 2 methods with the same name the latter will be the one to be configured.
 
-## Attribute based ACL
+## Middlewares
 
-There are 2 kind of attribute based acl: `attribute path to string` and `attribute path to attribute path`.
-You compare a property of the metadata object (identified by its path in the metadata object structure)
-with a string, or with another property of the metadata object (also identified by its path)
+You can define middlewares functions, load them into uboss and reference them within the config file to create a pipeline
+of functions. 
 
-```javascript
+There are 2 different middleware phases: **beforeInvoke** and **afterInvoke**, respectively executed before or after the method being invoked.
+Clearly beforeInvoke middlewares should expect a Request argument as input while afterInvoke a Response argument.
 
-// attribute based to string
-const acl = {
-  method: 'doStuff',
-  attribute: {
-    path: 'requestor.roles',
-    include: 'admin'
-  }
-};
+Each Middleware can either modify the request/response and pass it along to the next function, throw an error that 
+will be bubble up as is to the caller or interrupt the pipeline execution and return a value directly to the caller.
 
+The first argument of a middleware will be the Request/Response, while the second argument is a function that can be used to 
+interrupt the pipeline and optionally return a value to the caller.
 
-const acl = {
-  method: 'doStuff',
-  attribute: {
-    path: 'requestor.roles',
-    equal: 'admin'
-  }
-};
+Middlewares must either return a value, a Promise and can throw errors both synchronously and asynchronously
 
-// acl bound to multiple methods
-const acl = {
-  methods: ['doStuff', 'otherStuff'],
-  attribute: {
-    path: 'requestor.roles',
-    equal: 'admin'
-  }
-};
+As each middleware return value will be fed as the next middleware input middlewares, like methods, middlewares must be unary functions.
 
-// this is the same as defining 2 attribute based acl
-const acl = {
-  method: 'doStuff',
-  attributes: [{
-    path: 'requestor.roles',
-    equal: 'admin'
-  }, {
-    path: 'requestor.roles',
-    equal: 'admin'
-  }]
-};
-
-```
-
-## Attribute/Attribute based acl
+Please Note **middlewares** are loaded by name, so if you load 2 middlewares with the same name the latter will be the one to be configured.
 
 ```javascript
-const acl = {
-  method: 'doStuff',
-  attribute: {
-    path: 'requestor.id',
-    include: {
-      path: 'resource.owner'
+const U = require('uboss')();
+
+const methods = {
+  upper: data => data.toUpperCase(),
+  lower: data => data.toLowerCase(),
+  notUsed: data => whatever(data),
+  ciao: name => 'ciao ' + name
+};
+
+const middlewares = {
+  duplicate: data => data + data,
+  interrupt: (data, res) => res('hello')
+};
+
+// configure the methods you want to expose
+const config = {
+  methods: {
+    upper: {
+      middlewares: {
+        beforeInvoke: [
+          'duplicate'
+        ]
+      }
+    },
+    lower: {
+      middlewares: {
+        afterInvoke: [
+          'duplicate'
+        ]
+      }
+    },
+    ciao: {
+      middlewares:{
+        beforeInvoke: [
+          'interrupt'
+        ]
+      }
     }
   }
 };
+
+// load middlewares
+U.load({ middlewares });
+
+// load available methods
+U.load({ methods });
+
+// load configuration
+U.load({ config });
+
+// build API
+const API = U.compose();
+
+API.upper('ciao').then(console.log); // => 'CIAOCIAO'
+API.lower('ciao').then(console.log); // => 'ciaociao'
+API.ciao('davide') // => 'hello'
 ```
 
-## ROLE based acl
+## ACL
 
-If you need to define more complex acl you can use Roles. Roles are functions that should expect to receive as input
-the metadata object and should return true or false.
+Uboss also provides an abstraction for defining ACL and protect a method behind it. The only assumption Uboss makes is
+the incoming request object might have a metadata property which contains the data required to resolve ACL questions.
+
+ACL are evaluated within the middleware pipeline: [beforeAuth, Auth, beforeInvoke, Method, afterInvoke].
+
+You can leverage the special middleware phase **beforeAuth** to define middlewares that need to extend the metadata
+object, by for example fetching additional information asynchronously.
+
+### Usage
+
+ACL are bound to methods via Uboss config:
 
 ```javascript
-const UB = require('uboss');
-const uboss = UB();
-
-// role
-function owner(metadata){
-  return metadata.requestor.id === metadata.resource.owner && 
-  metadata.requestor.roles.includes('admin');
+const config = {
+  methods: {
+      upper: {
+        acl: {}
+      }
+  }
 };
-
-const acl = {
-  method: 'doStuff',
-  role: 'owner'
-};
-
-// this should be like defining 2 role based acl
-const acl = {
-  method: 'doStuff',
-  roles: ['owner', 'mayor']
-};
-
-uboss.load({methods: 'doStuff'});
-uboss.load({acl: acl});
-uboss.load({roles: owner});
-
-uboss.exec({method: 'doStuff', metadata: {requestor: { id: 1, roles: [ 'admin']}}, resource: { owner: 1}}); // => true
-
-uboss.exec({method: 'doStuff', metadata: {requestor: { id: 1, roles: [ 'admin']}}, resource: { owner: 3}}); // => false
-
 ```
+
+### ROLE based acl
+
+At the moment the only supported ACL are ROLE based acl.
+Roles functions will receive as input the request metadata object and should return true or false **synchronously**
 
 Uboss will swallow any error thrown by the roles fn and return false instead.
 
-## Result
-The exec method always return true or false
+```javascript
+const U = require('uboss')();
 
-## API
+const methods = {
+  resetPassword: req => {} // do reset password stuff
+};
 
-### LOAD
+const roles = {
+  admin : metadata => metadata.requestor.roles.includes('admin')
+};
 
-**Load Method** Accept an object as per below schemas
+// configure the methods you want to expose
+const config = {
+  methods: {
+    resetPassword: {
+      acl: {
+        roles: ['admin']
+      }
+    },
+  }
+};
 
-Property Name | Type | Required |  Default | Description
--------- | -------- | ----------- | -------- | ------- |
-`methods` | string OR [] | **true** | N/A |  this is name of method || methods to load into uboss
+// load available roles
+U.load({ roles });
 
-**Load ACL** Accept an object as per below schemas
+// load available methods
+U.load({ methods });
 
-Property Name | Type | Required |  Default | Description
--------- | -------- | ----------- | -------- | ------- |
-`acl` | acl Object OR [acl Object] | **true** | N/A |  this is the acl Object || a list of acl objects
+// load configuration
+U.load({ config });
 
-**Load ROLES** Accept an object as per below schemas
+// build API
+const API = U.compose();
 
-Property Name | Type | Required |  Default | Description
--------- | -------- | ----------- | -------- | ------- |
-`roles` | role Object OR [role Object] | **true** | N/A |  this is the role Object || a list of role objects
+API.resetPassword({ id:'user1', metadata: { requestor: { roles: ['admin'] }}}).then(console.log); // => ''
+API.resetPassword({ id:'user1', metadata: { requestor: { roles: ['standard User'] }}}).catch(console.log); // => '403 Unauthorized'
+```
+
+You first load the roles, then you can reference them in the config.
