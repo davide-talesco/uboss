@@ -1,6 +1,6 @@
 {
   "name": "uboss",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "A lightweight authorization framework",
   "main": "index.js",
   "directories": {

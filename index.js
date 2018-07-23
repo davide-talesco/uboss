@@ -83,7 +83,7 @@ const CONFIG = stampit({
       this.methods = {};
       // config should be an object
       assert(_.isObject(methods), "config methods property must be an object");
-
+      assert(!_.isArray(methods), "config methods should be an object and not an array");
       // each config key is a method
       Object.keys(methods).map(method => {
         // initialize the method

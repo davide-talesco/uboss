@@ -679,7 +679,7 @@ experiment("exec method", () => {
 
   });
 
-  test.only('multi role acl', async () => {
+  test('multi role acl', async () => {
     const U = uboss();
 
     const roles = {
