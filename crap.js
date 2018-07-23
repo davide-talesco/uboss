@@ -1,4 +1,4 @@
-const U = require('./index2')();
+const U = require('./index')();
 
 const roles = {
   admin: metadata => metadata.requestor === 'admin',

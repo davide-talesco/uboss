@@ -5,7 +5,7 @@
 
 "use strict";
 const _ = require("lodash");
-const uboss = require("../index2");
+const uboss = require("../index");
 const Lab = require("lab");
 const { expect, fail } = require("code");
 
