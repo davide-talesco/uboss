@@ -127,7 +127,8 @@ API.ciao('davide') // => 'hello'
 ## ACL
 
 Uboss also provides an abstraction for defining ACL and protect a method behind it. The only assumption Uboss makes is
-the incoming request object might have a metadata property which contains the data required to resolve ACL questions.
+the incoming request object might have a metadata property (or a getMetadata method that returns the metadata object) 
+which contains the data required to resolve ACL questions.
 
 ACL are evaluated within the middleware pipeline: [beforeAuth, Auth, beforeInvoke, Method, afterInvoke].
 
@@ -194,3 +195,18 @@ API.resetPassword({ id:'user1', metadata: { requestor: { roles: ['standard User'
 ```
 
 You first load the roles, then you can reference them in the config.
+
+**IMPORTANT**
+In role Fn, when using the `===` operator always always check for undefined because in JS undefined === undefined is **true**
+
+```javascript
+// Wrong: if both metadata.requestor.dn and metadata.resource.manager are undefined this function return true
+function owner(metadata){
+  return metadata.requestor.dn === metadata.resource.manager;
+}
+// Right
+function owner(metadata){
+  return metadata.requestor.dn &&
+    metadata.requestor.dn === metadata.resource.manager;
+}
+``` 

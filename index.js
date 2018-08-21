@@ -195,8 +195,10 @@ function compose() {
 
     // build auth method
     const auth = req => {
+      // if req.metadata is a function execute it to get the metadata object else just try and use the metadata property
+      const metadata = req && req.metadata && typeof req.metadata === 'function' ? req.getMetadata() : req.metadata;
       // perform acl evaluation
-      const allowed = acl.compose({ roles })(req.metadata);
+      const allowed = acl.compose({ roles })(metadata);
 
       if (allowed) return req;
 
