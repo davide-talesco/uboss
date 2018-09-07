@@ -349,6 +349,29 @@ experiment("exec method", () => {
     expect(await API.increase(1)).to.be.equal(4);
   });
 
+  test(" multiple middlewares on the same chain", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        increase: {
+          middlewares: {
+            beforeInvoke: ["increase", "decrease"],
+          }
+        }
+      }
+    };
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({ middlewares: { increase: num => ++num, decrease: num => --num } });
+
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(2);
+  });
+
   test("with middleware that throws synchronously", async () => {
     const U = uboss();
     const config = {
@@ -559,7 +582,6 @@ experiment("exec method", () => {
 
     expect(await API.increase(1)).to.be.equal(12);
   });
-
 
   test('with allowed role base acl', async () => {
     const U = uboss();
