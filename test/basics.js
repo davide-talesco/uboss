@@ -8,6 +8,10 @@ const _ = require("lodash");
 const uboss = require("../index");
 const Lab = require("lab");
 const { expect, fail } = require("code");
+const EE = require('events').EventEmitter;
+const sinon = require('sinon');
+const util = require('util');
+const nextTickAsync = util.promisify(process.nextTick);
 
 // Test files must require the lab module, and export a test script
 const lab = (exports.lab = Lab.script());
@@ -270,27 +274,93 @@ experiment("exec method", () => {
     expect(await API.increase(1)).to.be.equal(3);
   });
 
-  test("with value returning afterInvoke middleware", async () => {
+  test("afterInvoke middleware should be called with request and response", async () => {
     const U = uboss();
+    const E = new EE();
+
+    const spy = sinon.spy();
+    E.on('called', spy);
+    
     const config = {
       methods: {
         increase: {
           middlewares: {
-            afterInvoke: ["increase"]
+            afterInvoke: ["log"]
           }
         }
       }
     }
     U.load({ methods: { increase: num => ++num } });
 
-    U.load({ middlewares: { increase: num => ++num } });
+    U.load({ 
+      middlewares: { 
+        // afterInvoke should be called with the request and the response
+        log: (req, res) => {
+          E.emit('called', req, res);
+        } 
+      } 
+    });
+    U.load({ config });
 
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(2);
+
+    // we need to wait next tick in order for afterInvoke middleware to execute
+    await nextTickAsync();
+
+    // the request should be 1
+    expect(spy.args[0][0]).to.be.equal(1)
+    // the response should be 2
+    expect(spy.args[0][1]).to.be.equal(2)
+
+  });
+
+  // this means that if request is modified during the middleware pipeline afterInvoke will receive the modified request
+  test("afterInvoke middleware should be called with the same request object method was called", async () => {
+    const U = uboss();
+    const E = new EE();
+
+    const spy = sinon.spy();
+    E.on('called', spy);
+    
+    const config = {
+      methods: {
+        increase: {
+          middlewares: {
+            beforeInvoke: ["increase"],
+            afterInvoke: ["log"]
+          }
+        }
+      }
+    }
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({ 
+      middlewares: {
+        increase: num => ++num,
+        // afterInvoke should be called with the request and the response
+        log: (req, res) => {
+          E.emit('called', req, res);
+        } 
+      } 
+    });
     U.load({ config });
 
     // compose API
     const API = U.compose();
 
     expect(await API.increase(1)).to.be.equal(3);
+
+    // we need to wait next tick in order for afterInvoke middleware to execute
+    await nextTickAsync();
+
+    // the request should be 1
+    expect(spy.args[0][0]).to.be.equal(2)
+    // the response should be 2
+    expect(spy.args[0][1]).to.be.equal(3)
+
   });
 
   test("with promise returning middleware", async () => {
@@ -299,7 +369,7 @@ experiment("exec method", () => {
       methods: {
         increase: {
           middlewares: {
-            afterInvoke: ["increase"]
+            beforeInvoke: ["increase"]
           }
         }
       }
@@ -323,30 +393,6 @@ experiment("exec method", () => {
     const API = U.compose();
 
     expect(await API.increase(1)).to.be.equal(3);
-  });
-
-  test("with both afterInvoke and beforeInvoke middleware", async () => {
-    const U = uboss();
-    const config = {
-      methods: {
-        increase: {
-          middlewares: {
-            beforeInvoke: ["increase"],
-            afterInvoke: ["increase"]
-          }
-        }
-      }
-    };
-    U.load({ methods: { increase: num => ++num } });
-
-    U.load({ middlewares: { increase: num => ++num } });
-
-    U.load({ config });
-
-    // compose API
-    const API = U.compose();
-
-    expect(await API.increase(1)).to.be.equal(4);
   });
 
   test(" multiple middlewares on the same chain", async () => {
@@ -554,13 +600,15 @@ experiment("exec method", () => {
     expect(await API.increase(1)).to.be.equal(11);
   });
 
-  test("with afterInvoke middleware that interrupts the chain", async () => {
+  // this is actually taking longer just because the slowFn is still being run but syncronously but what matters is that 
+  // API.increase does not wait for it
+  test("does not wait for long running asynchronous afterInvoke middleware", async () => {
     const U = uboss();
     const config = {
       methods: {
         increase: {
           middlewares: {
-            afterInvoke: ["increase"]
+            afterInvoke: ["slowFn"]
           }
         }
       }
@@ -569,9 +617,10 @@ experiment("exec method", () => {
 
     U.load({
       middlewares: {
-        increase: (num, res) => {
-          res(num + 10);
-        }
+        slowFn: () => new Promise((res)=> {
+          _.range(5000000).map(n => n);
+          res();
+        })
       }
     });
 
@@ -580,7 +629,36 @@ experiment("exec method", () => {
     // compose API
     const API = U.compose();
 
-    expect(await API.increase(1)).to.be.equal(12);
+    expect(await API.increase(1)).to.be.equal(2);
+  });
+
+  // this is actually taking longer just because the slowFn is still being run but syncronously but what matters is that 
+  // API.increase does not wait for it
+  test("does not wait for long running synchronous afterInvoke middleware", async () => {
+    const U = uboss();
+    const config = {
+      methods: {
+        increase: {
+          middlewares: {
+            afterInvoke: ["slowFn"]
+          }
+        }
+      }
+    }
+    U.load({ methods: { increase: num => ++num } });
+
+    U.load({
+      middlewares: {
+        slowFn: () => _.range(5000000).map(n => n)
+      }
+    });
+
+    U.load({ config });
+
+    // compose API
+    const API = U.compose();
+
+    expect(await API.increase(1)).to.be.equal(2);
   });
 
   test('with allowed role base acl', async () => {

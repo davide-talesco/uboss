@@ -51,17 +51,22 @@ You can define middlewares functions, load them into uboss and reference them wi
 of functions. 
 
 There are 2 different middleware phases: **beforeInvoke** and **afterInvoke**, respectively executed before or after the method being invoked.
-Clearly beforeInvoke middlewares should expect a Request argument as input while afterInvoke a Response argument.
+Clearly beforeInvoke middlewares should expect a Request argument as input.
+
+afterInvoke is executed after the response has been sent to the caller, hence it cannot modify the response object.
+It will be called with both request and response objects.
 
 Each Middleware can either modify the request/response and pass it along to the next function, throw an error that 
 will be bubble up as is to the caller or interrupt the pipeline execution and return a value directly to the caller.
 
 The first argument of a middleware will be the Request/Response, while the second argument is a function that can be used to 
-interrupt the pipeline and optionally return a value to the caller.
+interrupt the pipeline and optionally return a value to the caller. (does not apply to afterInvoke middlewares which are called with request and response)
 
 Middlewares must either return a value, a Promise and can throw errors both synchronously and asynchronously
 
 As each middleware return value will be fed as the next middleware input middlewares, like methods, middlewares must be unary functions.
+
+This does not apply to afterInvoke middlewares which are executed in parallel!
 
 Please Note **middlewares** are loaded by name, so if you load 2 middlewares with the same name the latter will be the one to be configured.
 

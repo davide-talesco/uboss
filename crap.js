@@ -1,40 +1,43 @@
-const U = require('./index')();
+const uboss = require("./index");
+const sinon = require('sinon');
+const U = uboss();
+const EE = require('events').EventEmitter;
+const E = new EE();
 
-const roles = {
-  admin: metadata => metadata.requestor === 'admin',
-  user: metadata => metadata.requestor === 'user'
-};
+const util = require('util');
+const setImmediateAsync = util.promisify(setImmediate);
 
-const methods = {
-  increase: req => ++req.value
-};
+const spy = sinon.spy();
+E.on('called', spy);
 
 const config = {
   methods: {
     increase: {
-      acl: {
-        roles: ['admin', 'user']
+      middlewares: {
+        afterInvoke: ["slowFn"]
       }
     }
   }
-};
+}
+U.load({ methods: { increase: num => ++num } });
 
-U.load({ roles });
-U.load({ methods });
+U.load({
+  middlewares: {
+    slowFn: () => {
+      console.log('completed execution')
+    }
+  }
+});
+
 U.load({ config });
 
+// compose API
 const API = U.compose();
 
-const metadata = {
-  requestor : 'admin'
-};
+async function boot(){
+  console.log(await API.increase(1));
+  console.log('done')
+  await new Promise((r) => setTimeout(()=>r(), 1000))
+}
 
-const metadata2 = {
-  requestor : 'user'
-};
-
-const metadata3 = {
-  requestor : 'partner'
-};
-
-API.increase({ value: 1, metadata2 }).then(console.log);
+boot();

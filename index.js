@@ -223,9 +223,7 @@ function compose() {
     const pipeline = [
       ...beforeAuthMiddlewares,
       auth,
-      ...beforeInvokeMiddlewares,
-      method,
-      ...afterInvokeMiddlewares
+      ...beforeInvokeMiddlewares
     ];
 
     // build the composed function
@@ -238,7 +236,13 @@ function compose() {
           }, Promise.resolve(initialValue));
 
         compose(pipeline)(Promise.resolve(req))
-          .then(resolve)
+          // run the method
+          .then(req => Promise.resolve(method(req))
+            .then(res => {
+              resolve(res);
+              // this fn should be executed at next thick as the caller should not wait for it to complete
+              process.nextTick(() => runAfterInvokeMiddlewares(afterInvokeMiddlewares, req, res));
+            }))
           .catch(reject);
       });
 
@@ -247,6 +251,16 @@ function compose() {
   });
 
   return API;
+}
+// this function should swallow any error triggered by afterInvokeMiddlewares
+async function runAfterInvokeMiddlewares(afterInvokeMiddlewares, req, res){
+  try {
+    afterInvokeMiddlewares.map(afterInvokeMiddleware => {
+      afterInvokeMiddleware(req, res)})
+  }
+  catch(e){
+    //console.log(e);
+  }
 }
 
 module.exports = UBOSS;
