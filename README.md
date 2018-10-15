@@ -53,7 +53,7 @@ of functions.
 There are 2 different middleware phases: **beforeInvoke** and **afterInvoke**, respectively executed before or after the method being invoked.
 Clearly beforeInvoke middlewares should expect a Request argument as input.
 
-afterInvoke is executed after the response has been sent to the caller, hence it cannot modify the response object.
+afterInvoke are executed after the response has been sent to the caller, hence it cannot modify the response object.
 It will be called with both request and response objects.
 
 Each Middleware can either modify the request/response and pass it along to the next function, throw an error that 
